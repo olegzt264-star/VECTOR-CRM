@@ -260,6 +260,7 @@ export default function App() {
   const tabs = [
     { id: "calendar", label: "Календар", icon: CalendarIcon },
     { id: "projects", label: "Проекти", icon: Briefcase },
+    { id: "finance", label: "Фінанси", icon: Wallet },
     { id: "inventory", label: "Склад", icon: Package },
     { id: "employees", label: "Співробітники", icon: Wrench },
     { id: "clients", label: "Клієнти", icon: Users },
@@ -319,6 +320,14 @@ export default function App() {
           />
         ) : tab === "projects" ? (
           <ProjectsTab
+            projects={projects}
+            setProjects={setProjects}
+            clients={clients}
+            equipment={equipment}
+            employees={employees}
+          />
+        ) : tab === "finance" ? (
+          <FinanceTab
             projects={projects}
             setProjects={setProjects}
             clients={clients}
@@ -657,6 +666,218 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees }) {
                 }
               : null
           }
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------- Finance Tab ----------
+
+function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [periodFrom, setPeriodFrom] = useState("");
+  const [periodTo, setPeriodTo] = useState("");
+  const [clientFilter, setClientFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const clientName = (id) => clients.find((c) => c.id === id)?.name || "—";
+
+  const paymentStatus = (p) => {
+    const paid = sum(p.payments || []);
+    if (p.price > 0 && paid >= p.price) return "paid";
+    if (paid > 0) return "partial";
+    return "unpaid";
+  };
+
+  const PAYMENT_STATUS_LABEL = {
+    paid: { label: "Оплачено повністю", chip: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+    partial: { label: "Частково оплачено", chip: "bg-amber-50 text-amber-700 border-amber-200" },
+    unpaid: { label: "Не оплачено", chip: "bg-rose-50 text-rose-600 border-rose-200" },
+  };
+
+  const filtered = useMemo(() => {
+    return projects.filter((p) => {
+      if (p.status === "cancelled") return false;
+      if (periodFrom && p.startDate < periodFrom) return false;
+      if (periodTo && p.startDate > periodTo) return false;
+      if (clientFilter !== "all" && p.clientId !== clientFilter) return false;
+      if (statusFilter !== "all" && paymentStatus(p) !== statusFilter) return false;
+      return true;
+    });
+  }, [projects, periodFrom, periodTo, clientFilter, statusFilter]);
+
+  const totals = useMemo(() => {
+    let price = 0,
+      paid = 0,
+      expenses = 0;
+    for (const p of filtered) {
+      price += Number(p.price) || 0;
+      paid += sum(p.payments || []);
+      expenses += sum(p.expenses || []);
+    }
+    return { price, paid, expenses, remaining: Math.max(0, price - paid), profit: paid - expenses };
+  }, [filtered]);
+
+  const sorted = useMemo(() => [...filtered].sort((a, b) => (a.startDate < b.startDate ? 1 : -1)), [filtered]);
+
+  const hasFilters = periodFrom || periodTo || clientFilter !== "all" || statusFilter !== "all";
+
+  return (
+    <div>
+      {/* filters */}
+      <div className="bg-white border border-neutral-200 rounded-lg p-4 mb-4 flex flex-wrap items-end gap-3">
+        <Field label="Період з">
+          <input
+            type="date"
+            value={periodFrom}
+            onChange={(e) => setPeriodFrom(e.target.value)}
+            className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+        </Field>
+        <Field label="Період по">
+          <input
+            type="date"
+            value={periodTo}
+            onChange={(e) => setPeriodTo(e.target.value)}
+            className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+        </Field>
+        <Field label="Клієнт">
+          <select
+            value={clientFilter}
+            onChange={(e) => setClientFilter(e.target.value)}
+            className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            <option value="all">Усі клієнти</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Статус оплати">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            <option value="all">Усі статуси</option>
+            <option value="paid">Оплачено повністю</option>
+            <option value="partial">Частково оплачено</option>
+            <option value="unpaid">Не оплачено</option>
+          </select>
+        </Field>
+        {hasFilters && (
+          <button
+            onClick={() => {
+              setPeriodFrom("");
+              setPeriodTo("");
+              setClientFilter("all");
+              setStatusFilter("all");
+            }}
+            className="text-xs text-neutral-500 hover:text-neutral-700 underline pb-2"
+          >
+            Скинути фільтри
+          </button>
+        )}
+      </div>
+
+      {/* summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
+        <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
+          <div className="text-[11px] text-neutral-400 mb-1">Сума проектів</div>
+          <div className="text-base font-semibold text-neutral-800">{fmtMoney(totals.price)}</div>
+        </div>
+        <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
+          <div className="text-[11px] text-neutral-400 mb-1 flex items-center gap-1">
+            <TrendingUp size={11} className="text-emerald-500" /> Отримано
+          </div>
+          <div className="text-base font-semibold text-emerald-600">{fmtMoney(totals.paid)}</div>
+        </div>
+        <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
+          <div className="text-[11px] text-neutral-400 mb-1">Заборгованість</div>
+          <div className="text-base font-semibold text-neutral-800">{fmtMoney(totals.remaining)}</div>
+        </div>
+        <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
+          <div className="text-[11px] text-neutral-400 mb-1 flex items-center gap-1">
+            <TrendingDown size={11} className="text-rose-500" /> Витрати
+          </div>
+          <div className="text-base font-semibold text-rose-500">{fmtMoney(totals.expenses)}</div>
+        </div>
+        <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
+          <div className="text-[11px] text-neutral-400 mb-1">Прибуток</div>
+          <div className={`text-base font-semibold ${totals.profit >= 0 ? "text-neutral-800" : "text-rose-500"}`}>
+            {fmtMoney(totals.profit)}
+          </div>
+        </div>
+      </div>
+
+      {/* project list */}
+      {sorted.length === 0 ? (
+        <div className="text-sm text-neutral-400 py-16 text-center border border-dashed border-neutral-200 rounded-lg">
+          Немає проектів за обраними фільтрами.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {sorted.map((p) => {
+            const st = paymentStatus(p);
+            const paid = sum(p.payments || []);
+            const remaining = Math.max(0, (Number(p.price) || 0) - paid);
+            return (
+              <button
+                key={p.id}
+                onClick={() => {
+                  setEditing(p);
+                  setShowForm(true);
+                }}
+                className="text-left bg-white border border-neutral-200 rounded-lg p-3.5 hover:border-neutral-300 hover:shadow-sm transition-all flex items-center justify-between gap-4"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-neutral-800 truncate">{p.name}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${PAYMENT_STATUS_LABEL[st].chip}`}>
+                      {PAYMENT_STATUS_LABEL[st].label}
+                    </span>
+                  </div>
+                  <div className="text-xs text-neutral-500 mt-1">
+                    {clientName(p.clientId)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-medium text-neutral-700">{fmtMoney(p.price)}</div>
+                  <div className="text-[11px] text-neutral-400">
+                    Отримано {fmtMoney(paid)}
+                    {remaining > 0 ? ` · Борг ${fmtMoney(remaining)}` : ""}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {showForm && (
+        <ProjectForm
+          project={editing}
+          clients={clients}
+          equipment={equipment}
+          employees={employees}
+          projects={projects}
+          onClose={() => setShowForm(false)}
+          onSave={(p) => {
+            setProjects((prev) => {
+              const exists = prev.some((x) => x.id === p.id);
+              return exists ? prev.map((x) => (x.id === p.id ? p : x)) : [...prev, p];
+            });
+            setShowForm(false);
+          }}
+          onDelete={(id) => {
+            setProjects((prev) => prev.filter((x) => x.id !== id));
+            setShowForm(false);
+          }}
         />
       )}
     </div>
