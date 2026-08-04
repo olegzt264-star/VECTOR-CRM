@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { subscribeToKey } from "./storage-supabase.js";
+import { supabaseUrl, supabaseAnonKey } from "./supabaseClient.js";
 import {
   Calendar as CalendarIcon,
   Package,
@@ -201,23 +202,57 @@ export default function App() {
     return () => clearTimeout(saveTimer.current);
   }, [equipment, clients, employees, projects]);
 
-  // Якщо користувач закриває вкладку/згортає застосунок до того, як
-  // спрацював таймер збереження вище — зберігаємо негайно, щоб не
-  // втратити щойно введені дані.
+  // Надійне збереження саме на момент закриття вкладки чи всього
+  // браузера: звичайний запит (fetch без keepalive) браузер може
+  // обірвати, щойно почне закривати процес, і дані не встигають
+  // дійти до сервера. keepalive:true спеціально призначений саме
+  // для такого випадку — запит переживає закриття сторінки.
+  const flushOnClose = () => {
+    try {
+      const raw = JSON.stringify({ equipment, clients, employees, projects });
+      if (raw === lastSyncedRawRef.current) return;
+      if (!supabaseUrl || !supabaseAnonKey) return;
+      const body = JSON.stringify([
+        { k: STORAGE_KEY, shared: false, v: raw, updated_at: new Date().toISOString() },
+      ]);
+      fetch(`${supabaseUrl}/rest/v1/kv_store?on_conflict=k,shared`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${supabaseAnonKey}`,
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body,
+        keepalive: true,
+      }).catch(() => {});
+      lastSyncedRawRef.current = raw;
+    } catch (e) {
+      // best effort — нічого страшного, якщо не вдалось
+    }
+  };
+  const flushOnCloseRef = useRef(flushOnClose);
+  flushOnCloseRef.current = flushOnClose;
+
   useEffect(() => {
-    const flushNow = () => {
+    const handleClose = () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      flushSaveRef.current();
+      flushOnCloseRef.current();
     };
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") flushNow();
+      // Перемикання на іншу вкладку/згортання — сторінка ще жива,
+      // тож звичайне збереження встигає завершитись нормально.
+      if (document.visibilityState === "hidden") {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        flushSaveRef.current();
+      }
     };
-    window.addEventListener("beforeunload", flushNow);
-    window.addEventListener("pagehide", flushNow);
+    window.addEventListener("beforeunload", handleClose);
+    window.addEventListener("pagehide", handleClose);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      window.removeEventListener("beforeunload", flushNow);
-      window.removeEventListener("pagehide", flushNow);
+      window.removeEventListener("beforeunload", handleClose);
+      window.removeEventListener("pagehide", handleClose);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
