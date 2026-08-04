@@ -112,7 +112,7 @@ export default function App() {
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const loadedRef = useRef(false);
   const saveTimer = useRef(null);
-  const skipNextSaveRef = useRef(false);
+  const lastSyncedRawRef = useRef(null);
 
   // ---- load from persistent storage on mount ----
   useEffect(() => {
@@ -125,6 +125,7 @@ export default function App() {
           if (data.clients) setClients(data.clients);
           if (data.employees) setEmployees(data.employees);
           if (data.projects) setProjects(data.projects);
+          lastSyncedRawRef.current = res.value;
         }
       } catch (e) {
         // Нічого немає в Supabase — перевіряємо, чи є старі дані в
@@ -139,6 +140,7 @@ export default function App() {
             if (data.clients) setClients(data.clients);
             if (data.employees) setEmployees(data.employees);
             if (data.projects) setProjects(data.projects);
+            lastSyncedRawRef.current = legacyRaw;
             await window.storage.set(STORAGE_KEY, legacyRaw, false).catch(() => {});
           }
         } catch (e2) {
@@ -154,9 +156,14 @@ export default function App() {
   // ---- live sync: pick up changes saved from another device ----
   useEffect(() => {
     const unsubscribe = subscribeToKey(STORAGE_KEY, false, (rawValue) => {
+      // Ігноруємо відлуння власного щойно виконаного збереження —
+      // порівнюємо вміст, а не покладаємось на прапорець-таймінг
+      // (той підхід міг помилково "зʼїдати" наступне реальне
+      // збереження, якщо зміни вносились швидко одна за одною).
+      if (rawValue === lastSyncedRawRef.current) return;
       try {
         const data = JSON.parse(rawValue);
-        skipNextSaveRef.current = true;
+        lastSyncedRawRef.current = rawValue;
         if (data.equipment) setEquipment(data.equipment);
         if (data.clients) setClients(data.clients);
         if (data.employees) setEmployees(data.employees);
@@ -168,29 +175,52 @@ export default function App() {
     return unsubscribe;
   }, []);
 
-  // ---- persist on change (debounced) ----
+  // ---- persist on change (debounced, with immediate flush on close) ----
+  const flushSave = async () => {
+    if (!loadedRef.current) return;
+    const raw = JSON.stringify({ equipment, clients, employees, projects });
+    if (raw === lastSyncedRawRef.current) return;
+    try {
+      await window.storage.set(STORAGE_KEY, raw, false);
+      lastSyncedRawRef.current = raw;
+      setSaveState("saved");
+    } catch (e) {
+      setSaveState("idle");
+    }
+  };
+  const flushSaveRef = useRef(flushSave);
+  flushSaveRef.current = flushSave;
+
   useEffect(() => {
     if (!loadedRef.current) return;
-    if (skipNextSaveRef.current) {
-      skipNextSaveRef.current = false;
-      return;
-    }
     setSaveState("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      try {
-        await window.storage.set(
-          STORAGE_KEY,
-          JSON.stringify({ equipment, clients, employees, projects }),
-          false
-        );
-        setSaveState("saved");
-      } catch (e) {
-        setSaveState("idle");
-      }
-    }, 500);
+    saveTimer.current = setTimeout(() => {
+      flushSaveRef.current();
+    }, 150);
     return () => clearTimeout(saveTimer.current);
   }, [equipment, clients, employees, projects]);
+
+  // Якщо користувач закриває вкладку/згортає застосунок до того, як
+  // спрацював таймер збереження вище — зберігаємо негайно, щоб не
+  // втратити щойно введені дані.
+  useEffect(() => {
+    const flushNow = () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      flushSaveRef.current();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flushNow();
+    };
+    window.addEventListener("beforeunload", flushNow);
+    window.addEventListener("pagehide", flushNow);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("beforeunload", flushNow);
+      window.removeEventListener("pagehide", flushNow);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   const tabs = [
     { id: "calendar", label: "Календар", icon: CalendarIcon },
