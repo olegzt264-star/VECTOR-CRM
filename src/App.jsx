@@ -38,6 +38,8 @@ const MONTHS = [
   "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень",
 ];
 
+const PAYMENT_METHODS = ["Готівка", "Безготівково"];
+
 const EXPENSE_CATEGORIES = [
   "Логістика/транспорт",
   "Оплата бригади",
@@ -681,6 +683,7 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
   const [periodTo, setPeriodTo] = useState("");
   const [clientFilter, setClientFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [methodFilter, setMethodFilter] = useState("all");
 
   const clientName = (id) => clients.find((c) => c.id === id)?.name || "—";
 
@@ -704,25 +707,41 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
       if (periodTo && p.startDate > periodTo) return false;
       if (clientFilter !== "all" && p.clientId !== clientFilter) return false;
       if (statusFilter !== "all" && paymentStatus(p) !== statusFilter) return false;
+      if (methodFilter !== "all" && !(p.payments || []).some((pay) => pay.method === methodFilter)) return false;
       return true;
     });
-  }, [projects, periodFrom, periodTo, clientFilter, statusFilter]);
+  }, [projects, periodFrom, periodTo, clientFilter, statusFilter, methodFilter]);
 
   const totals = useMemo(() => {
     let price = 0,
       paid = 0,
-      expenses = 0;
+      expenses = 0,
+      cash = 0,
+      nonCash = 0;
     for (const p of filtered) {
       price += Number(p.price) || 0;
       paid += sum(p.payments || []);
       expenses += sum(p.expenses || []);
+      for (const pay of p.payments || []) {
+        if (pay.method === "Готівка") cash += Number(pay.amount) || 0;
+        else nonCash += Number(pay.amount) || 0;
+      }
     }
-    return { price, paid, expenses, remaining: Math.max(0, price - paid), profit: paid - expenses };
+    return {
+      price,
+      paid,
+      expenses,
+      cash,
+      nonCash,
+      remaining: Math.max(0, price - paid),
+      profit: paid - expenses,
+    };
   }, [filtered]);
 
   const sorted = useMemo(() => [...filtered].sort((a, b) => (a.startDate < b.startDate ? 1 : -1)), [filtered]);
 
-  const hasFilters = periodFrom || periodTo || clientFilter !== "all" || statusFilter !== "all";
+  const hasFilters =
+    periodFrom || periodTo || clientFilter !== "all" || statusFilter !== "all" || methodFilter !== "all";
 
   return (
     <div>
@@ -770,6 +789,17 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
             <option value="unpaid">Не оплачено</option>
           </select>
         </Field>
+        <Field label="Спосіб оплати">
+          <select
+            value={methodFilter}
+            onChange={(e) => setMethodFilter(e.target.value)}
+            className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            <option value="all">Усі способи</option>
+            <option value="Готівка">Готівка</option>
+            <option value="Безготівково">Безготівково</option>
+          </select>
+        </Field>
         {hasFilters && (
           <button
             onClick={() => {
@@ -777,6 +807,7 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
               setPeriodTo("");
               setClientFilter("all");
               setStatusFilter("all");
+              setMethodFilter("all");
             }}
             className="text-xs text-neutral-500 hover:text-neutral-700 underline pb-2"
           >
@@ -812,6 +843,17 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
           <div className={`text-base font-semibold ${totals.profit >= 0 ? "text-neutral-800" : "text-rose-500"}`}>
             {fmtMoney(totals.profit)}
           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
+          <div className="text-[11px] text-neutral-400 mb-1">Готівкою отримано</div>
+          <div className="text-base font-semibold text-neutral-800">{fmtMoney(totals.cash)}</div>
+        </div>
+        <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
+          <div className="text-[11px] text-neutral-400 mb-1">Безготівково отримано</div>
+          <div className="text-base font-semibold text-neutral-800">{fmtMoney(totals.nonCash)}</div>
         </div>
       </div>
 
@@ -904,7 +946,11 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
     setCrew((prev) => (prev.includes(empId) ? prev.filter((id) => id !== empId) : [...prev, empId]));
   };
 
-  const addPayment = () => setPayments((prev) => [...prev, { id: uid("pay"), date: toISO(new Date()), amount: "", note: "" }]);
+  const addPayment = () =>
+    setPayments((prev) => [
+      ...prev,
+      { id: uid("pay"), date: toISO(new Date()), amount: "", method: PAYMENT_METHODS[0], note: "" },
+    ]);
   const updatePayment = (idx, patch) => setPayments((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
   const removePayment = (idx) => setPayments((prev) => prev.filter((_, i) => i !== idx));
 
@@ -1143,6 +1189,17 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
                     onChange={(e) => updatePayment(idx, { date: e.target.value })}
                     className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                   />
+                  <select
+                    value={p.method || PAYMENT_METHODS[0]}
+                    onChange={(e) => updatePayment(idx, { method: e.target.value })}
+                    className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  >
+                    {PAYMENT_METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
                   <input
                     type="number"
                     value={p.amount}
