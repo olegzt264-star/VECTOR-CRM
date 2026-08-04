@@ -12,4 +12,6 @@ if (!url || !key) {
   );
 }
 
+export const supabaseUrl = url;
+export const supabaseAnonKey = key;
 export const supabase = createClient(url, key);
