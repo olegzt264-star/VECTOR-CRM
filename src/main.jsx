@@ -1,4 +1,4 @@
-import "./storage.js"; // підключає window.storage ДО завантаження App
+import "./storage-supabase.js"; // підключає window.storage ДО завантаження App
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";

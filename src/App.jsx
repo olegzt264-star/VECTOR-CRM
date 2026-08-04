@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { subscribeToKey } from "./storage-supabase.js";
 import {
   Calendar as CalendarIcon,
   Package,
@@ -111,6 +112,7 @@ export default function App() {
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const loadedRef = useRef(false);
   const saveTimer = useRef(null);
+  const skipNextSaveRef = useRef(false);
 
   // ---- load from persistent storage on mount ----
   useEffect(() => {
@@ -125,7 +127,23 @@ export default function App() {
           if (data.projects) setProjects(data.projects);
         }
       } catch (e) {
-        // no saved data yet — keep seed data
+        // Нічого немає в Supabase — перевіряємо, чи є старі дані в
+        // localStorage цього браузера (з попередньої версії застосунку),
+        // і якщо є, переносимо їх у спільну базу один раз.
+        try {
+          const legacyRaw =
+            typeof window !== "undefined" ? window.localStorage.getItem("personal:" + STORAGE_KEY) : null;
+          if (legacyRaw) {
+            const data = JSON.parse(legacyRaw);
+            if (data.equipment) setEquipment(data.equipment);
+            if (data.clients) setClients(data.clients);
+            if (data.employees) setEmployees(data.employees);
+            if (data.projects) setProjects(data.projects);
+            await window.storage.set(STORAGE_KEY, legacyRaw, false).catch(() => {});
+          }
+        } catch (e2) {
+          // no legacy data either — starts with seed data, that's fine
+        }
       } finally {
         loadedRef.current = true;
         setLoaded(true);
@@ -133,9 +151,30 @@ export default function App() {
     })();
   }, []);
 
+  // ---- live sync: pick up changes saved from another device ----
+  useEffect(() => {
+    const unsubscribe = subscribeToKey(STORAGE_KEY, false, (rawValue) => {
+      try {
+        const data = JSON.parse(rawValue);
+        skipNextSaveRef.current = true;
+        if (data.equipment) setEquipment(data.equipment);
+        if (data.clients) setClients(data.clients);
+        if (data.employees) setEmployees(data.employees);
+        if (data.projects) setProjects(data.projects);
+      } catch (e) {
+        // ignore malformed payloads
+      }
+    });
+    return unsubscribe;
+  }, []);
+
   // ---- persist on change (debounced) ----
   useEffect(() => {
     if (!loadedRef.current) return;
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
     setSaveState("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
