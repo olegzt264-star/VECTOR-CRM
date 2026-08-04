@@ -683,10 +683,13 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
   const [periodFrom, setPeriodFrom] = useState("");
   const [periodTo, setPeriodTo] = useState("");
   const [clientFilter, setClientFilter] = useState("all");
+  const [responsibleFilter, setResponsibleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [methodFilter, setMethodFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("date");
 
   const clientName = (id) => clients.find((c) => c.id === id)?.name || "—";
+  const employeeName = (id) => employees.find((e) => e.id === id)?.name || "";
 
   const paymentStatus = (p) => {
     const paid = sum(p.payments || []);
@@ -707,11 +710,12 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
       if (periodFrom && p.startDate < periodFrom) return false;
       if (periodTo && p.startDate > periodTo) return false;
       if (clientFilter !== "all" && p.clientId !== clientFilter) return false;
+      if (responsibleFilter !== "all" && p.responsibleId !== responsibleFilter) return false;
       if (statusFilter !== "all" && paymentStatus(p) !== statusFilter) return false;
       if (methodFilter !== "all" && !(p.payments || []).some((pay) => pay.method === methodFilter)) return false;
       return true;
     });
-  }, [projects, periodFrom, periodTo, clientFilter, statusFilter, methodFilter]);
+  }, [projects, periodFrom, periodTo, clientFilter, responsibleFilter, statusFilter, methodFilter]);
 
   const totals = useMemo(() => {
     let price = 0,
@@ -739,10 +743,29 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
     };
   }, [filtered]);
 
-  const sorted = useMemo(() => [...filtered].sort((a, b) => (a.startDate < b.startDate ? 1 : -1)), [filtered]);
+  const sorted = useMemo(() => {
+    if (sortBy === "responsible") {
+      return [...filtered].sort((a, b) => {
+        const na = employeeName(a.responsibleId);
+        const nb = employeeName(b.responsibleId);
+        if (!na && nb) return 1;
+        if (na && !nb) return -1;
+        const cmp = na.localeCompare(nb, "uk");
+        if (cmp !== 0) return cmp;
+        return a.startDate < b.startDate ? 1 : -1;
+      });
+    }
+    const today = new Date(toISO(new Date()));
+    return [...filtered].sort((a, b) => Math.abs(new Date(a.startDate) - today) - Math.abs(new Date(b.startDate) - today));
+  }, [filtered, sortBy, employees]);
 
   const hasFilters =
-    periodFrom || periodTo || clientFilter !== "all" || statusFilter !== "all" || methodFilter !== "all";
+    periodFrom ||
+    periodTo ||
+    clientFilter !== "all" ||
+    responsibleFilter !== "all" ||
+    statusFilter !== "all" ||
+    methodFilter !== "all";
 
   return (
     <div>
@@ -778,6 +801,20 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
             ))}
           </select>
         </Field>
+        <Field label="Відповідальний">
+          <select
+            value={responsibleFilter}
+            onChange={(e) => setResponsibleFilter(e.target.value)}
+            className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            <option value="all">Усі відповідальні</option>
+            {employees.map((em) => (
+              <option key={em.id} value={em.id}>
+                {em.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="Статус оплати">
           <select
             value={statusFilter}
@@ -801,12 +838,23 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
             <option value="Безготівково">Безготівково</option>
           </select>
         </Field>
+        <Field label="Сортування">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            <option value="date">За датою (найближчі спочатку)</option>
+            <option value="responsible">За відповідальним</option>
+          </select>
+        </Field>
         {hasFilters && (
           <button
             onClick={() => {
               setPeriodFrom("");
               setPeriodTo("");
               setClientFilter("all");
+              setResponsibleFilter("all");
               setStatusFilter("all");
               setMethodFilter("all");
             }}
@@ -887,6 +935,7 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
                   </div>
                   <div className="text-xs text-neutral-500 mt-1">
                     {clientName(p.clientId)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)}
+                    {p.responsibleId ? ` · Відп.: ${employeeName(p.responsibleId) || "—"}` : ""}
                   </div>
                 </div>
                 <div className="text-right shrink-0">
