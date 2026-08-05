@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { subscribeToKey } from "./storage-supabase.js";
-import { supabaseUrl, supabaseAnonKey } from "./supabaseClient.js";
+import { supabase, supabaseUrl, supabaseAnonKey } from "./supabaseClient.js";
 import {
   Calendar as CalendarIcon,
   Package,
@@ -105,7 +105,7 @@ const seedEmployees = [
 
 // ---------- main app ----------
 
-export default function App() {
+function CRMApp({ onLogout }) {
   const [tab, setTab] = useState("calendar");
   const [equipment, setEquipment] = useState(seedEquipment);
   const [clients, setClients] = useState(seedClients);
@@ -116,6 +116,19 @@ export default function App() {
   const loadedRef = useRef(false);
   const saveTimer = useRef(null);
   const lastSyncedRawRef = useRef(null);
+  const accessTokenRef = useRef(null);
+
+  // Тримаємо актуальний токен залогіненого користувача — потрібен
+  // для надійного збереження при закритті вкладки (нижче).
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      accessTokenRef.current = data?.session?.access_token || null;
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      accessTokenRef.current = session?.access_token || null;
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   // ---- load from persistent storage on mount ----
   useEffect(() => {
@@ -222,7 +235,7 @@ export default function App() {
         headers: {
           "Content-Type": "application/json",
           apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
+          Authorization: `Bearer ${accessTokenRef.current || supabaseAnonKey}`,
           Prefer: "resolution=merge-duplicates,return=minimal",
         },
         body,
@@ -282,8 +295,16 @@ export default function App() {
               <div className="text-[11px] text-neutral-400 leading-none mt-1">Оренда сценічного обладнання</div>
             </div>
           </div>
-          <div className="text-[11px] text-neutral-500">
-            {saveState === "saving" ? "Збереження…" : saveState === "saved" ? "Збережено" : ""}
+          <div className="flex items-center gap-3">
+            <div className="text-[11px] text-neutral-500">
+              {saveState === "saving" ? "Збереження…" : saveState === "saved" ? "Збережено" : ""}
+            </div>
+            <button
+              onClick={onLogout}
+              className="text-[11px] text-neutral-400 hover:text-white border border-neutral-700 hover:border-neutral-500 rounded-md px-2 py-1 transition-colors"
+            >
+              Вийти
+            </button>
           </div>
         </div>
         <div className="max-w-6xl mx-auto px-5 flex gap-1 border-t border-neutral-800">
@@ -344,6 +365,105 @@ export default function App() {
           <ClientsTab clients={clients} setClients={setClients} projects={projects} />
         )}
       </div>
+    </div>
+  );
+}
+
+// ---------- Auth wrapper (default export) ----------
+
+export default function App() {
+  const [session, setSession] = useState(undefined); // undefined = ще перевіряємо
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) {
+    return (
+      <div className="w-full h-full min-h-[700px] bg-neutral-50 flex items-center justify-center text-sm text-neutral-400">
+        Завантаження…
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <LoginScreen />;
+  }
+
+  return <CRMApp onLogout={() => supabase.auth.signOut()} />;
+}
+
+function LoginScreen() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) {
+      setError(
+        error.message === "Invalid login credentials"
+          ? "Невірний email або пароль."
+          : "Не вдалося увійти. Спробуйте ще раз."
+      );
+    }
+  };
+
+  return (
+    <div className="w-full h-full min-h-[700px] bg-neutral-50 flex items-center justify-center px-4">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white border border-neutral-200 rounded-lg p-6">
+        <div className="flex items-center gap-2.5 mb-6">
+          <div className="w-8 h-8 rounded-md bg-amber-500 flex items-center justify-center text-neutral-950 font-bold text-sm">
+            ▲
+          </div>
+          <div>
+            <div className="font-semibold tracking-tight leading-none text-neutral-900">СтейджРент CRM</div>
+            <div className="text-[11px] text-neutral-400 leading-none mt-1">Оренда сценічного обладнання</div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <Field label="Email">
+            <input
+              type="email"
+              required
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </Field>
+          <Field label="Пароль">
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </Field>
+        </div>
+
+        {error && <div className="text-xs text-rose-500 mt-3">{error}</div>}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full mt-5 text-sm font-medium px-3.5 py-2.5 rounded-md bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-50"
+        >
+          {loading ? "Вхід…" : "Увійти"}
+        </button>
+      </form>
     </div>
   );
 }
