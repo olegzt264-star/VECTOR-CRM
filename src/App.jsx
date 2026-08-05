@@ -1194,10 +1194,20 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
                     onChange={(e) => updateItem(idx, { equipmentId: e.target.value })}
                     className="flex-1 border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                   >
-                    {equipment.map((eq) => (
-                      <option key={eq.id} value={eq.id}>
-                        {eq.name}
-                      </option>
+                    {Object.entries(
+                      equipment.reduce((acc, eq) => {
+                        acc[eq.category] = acc[eq.category] || [];
+                        acc[eq.category].push(eq);
+                        return acc;
+                      }, {})
+                    ).map(([category, items]) => (
+                      <optgroup key={category} label={category}>
+                        {items.map((eq) => (
+                          <option key={eq.id} value={eq.id}>
+                            {eq.name}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                   <input
