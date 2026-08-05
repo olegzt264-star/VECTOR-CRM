@@ -569,7 +569,12 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees }) {
         const q = query.toLowerCase();
         return p.name.toLowerCase().includes(q) || clientName(p.clientId).toLowerCase().includes(q);
       })
-      .sort((a, b) => Math.abs(new Date(a.startDate) - today) - Math.abs(new Date(b.startDate) - today));
+      .sort((a, b) => {
+        const aDone = a.status === "done" ? 1 : 0;
+        const bDone = b.status === "done" ? 1 : 0;
+        if (aDone !== bDone) return aDone - bDone;
+        return Math.abs(new Date(a.startDate) - today) - Math.abs(new Date(b.startDate) - today);
+      });
   }, [projects, query, statusFilter, clients]);
 
   return (
@@ -756,7 +761,12 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
       });
     }
     const today = new Date(toISO(new Date()));
-    return [...filtered].sort((a, b) => Math.abs(new Date(a.startDate) - today) - Math.abs(new Date(b.startDate) - today));
+    return [...filtered].sort((a, b) => {
+      const aDone = a.status === "done" ? 1 : 0;
+      const bDone = b.status === "done" ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+      return Math.abs(new Date(a.startDate) - today) - Math.abs(new Date(b.startDate) - today);
+    });
   }, [filtered, sortBy, employees]);
 
   const hasFilters =
