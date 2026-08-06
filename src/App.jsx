@@ -312,7 +312,7 @@ function CRMApp({ onLogout }) {
             </button>
           </div>
         </div>
-        <div className="max-w-6xl mx-auto px-5 flex gap-1 border-t border-neutral-800">
+        <div className="max-w-6xl mx-auto px-5 flex gap-1 border-t border-neutral-800 overflow-x-auto">
           {tabs.map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
@@ -320,7 +320,7 @@ function CRMApp({ onLogout }) {
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors shrink-0 whitespace-nowrap ${
                   active
                     ? "border-amber-500 text-white"
                     : "border-transparent text-neutral-400 hover:text-neutral-200"
