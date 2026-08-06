@@ -18,6 +18,7 @@ import {
   Search,
   Wrench,
   Wallet,
+  Send,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
@@ -111,6 +112,7 @@ function CRMApp({ onLogout }) {
   const [clients, setClients] = useState(seedClients);
   const [employees, setEmployees] = useState(seedEmployees);
   const [projects, setProjects] = useState([]);
+  const [settings, setSettings] = useState({ telegramGroupChatId: "" });
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const loadedRef = useRef(false);
@@ -141,6 +143,7 @@ function CRMApp({ onLogout }) {
           if (data.clients) setClients(data.clients);
           if (data.employees) setEmployees(data.employees);
           if (data.projects) setProjects(data.projects);
+          if (data.settings) setSettings(data.settings);
           lastSyncedRawRef.current = res.value;
         }
       } catch (e) {
@@ -156,6 +159,7 @@ function CRMApp({ onLogout }) {
             if (data.clients) setClients(data.clients);
             if (data.employees) setEmployees(data.employees);
             if (data.projects) setProjects(data.projects);
+            if (data.settings) setSettings(data.settings);
             lastSyncedRawRef.current = legacyRaw;
             await window.storage.set(STORAGE_KEY, legacyRaw, false).catch(() => {});
           }
@@ -184,6 +188,7 @@ function CRMApp({ onLogout }) {
         if (data.clients) setClients(data.clients);
         if (data.employees) setEmployees(data.employees);
         if (data.projects) setProjects(data.projects);
+        if (data.settings) setSettings(data.settings);
       } catch (e) {
         // ignore malformed payloads
       }
@@ -194,7 +199,7 @@ function CRMApp({ onLogout }) {
   // ---- persist on change (debounced, with immediate flush on close) ----
   const flushSave = async () => {
     if (!loadedRef.current) return;
-    const raw = JSON.stringify({ equipment, clients, employees, projects });
+    const raw = JSON.stringify({ equipment, clients, employees, projects, settings });
     if (raw === lastSyncedRawRef.current) return;
     try {
       await window.storage.set(STORAGE_KEY, raw, false);
@@ -215,7 +220,7 @@ function CRMApp({ onLogout }) {
       flushSaveRef.current();
     }, 150);
     return () => clearTimeout(saveTimer.current);
-  }, [equipment, clients, employees, projects]);
+  }, [equipment, clients, employees, projects, settings]);
 
   // Надійне збереження саме на момент закриття вкладки чи всього
   // браузера: звичайний запит (fetch без keepalive) браузер може
@@ -224,7 +229,7 @@ function CRMApp({ onLogout }) {
   // для такого випадку — запит переживає закриття сторінки.
   const flushOnClose = () => {
     try {
-      const raw = JSON.stringify({ equipment, clients, employees, projects });
+      const raw = JSON.stringify({ equipment, clients, employees, projects, settings });
       if (raw === lastSyncedRawRef.current) return;
       if (!supabaseUrl || !supabaseAnonKey) return;
       const body = JSON.stringify([
@@ -339,6 +344,7 @@ function CRMApp({ onLogout }) {
             clients={clients}
             equipment={equipment}
             employees={employees}
+            settings={settings}
             setProjects={setProjects}
           />
         ) : tab === "projects" ? (
@@ -348,6 +354,7 @@ function CRMApp({ onLogout }) {
             clients={clients}
             equipment={equipment}
             employees={employees}
+            settings={settings}
           />
         ) : tab === "finance" ? (
           <FinanceTab
@@ -356,11 +363,18 @@ function CRMApp({ onLogout }) {
             clients={clients}
             equipment={equipment}
             employees={employees}
+            settings={settings}
           />
         ) : tab === "inventory" ? (
           <InventoryTab equipment={equipment} setEquipment={setEquipment} projects={projects} />
         ) : tab === "employees" ? (
-          <EmployeesTab employees={employees} setEmployees={setEmployees} projects={projects} />
+          <EmployeesTab
+            employees={employees}
+            setEmployees={setEmployees}
+            projects={projects}
+            settings={settings}
+            setSettings={setSettings}
+          />
         ) : (
           <ClientsTab clients={clients} setClients={setClients} projects={projects} />
         )}
@@ -484,7 +498,7 @@ function computeUsage(projects, equipmentId, start, end, excludeProjectId) {
 
 // ---------- Calendar Tab ----------
 
-function CalendarTab({ projects, clients, equipment, employees, setProjects }) {
+function CalendarTab({ projects, clients, equipment, employees, settings, setProjects }) {
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => toISO(new Date()));
   const [showForm, setShowForm] = useState(false);
@@ -648,6 +662,7 @@ function CalendarTab({ projects, clients, equipment, employees, setProjects }) {
           equipment={equipment}
           employees={employees}
           projects={projects}
+          settings={settings}
           onClose={() => setShowForm(false)}
           onSave={(p) => {
             setProjects((prev) => {
@@ -672,7 +687,7 @@ function CalendarTab({ projects, clients, equipment, employees, setProjects }) {
 
 // ---------- Projects Tab ----------
 
-function ProjectsTab({ projects, setProjects, clients, equipment, employees }) {
+function ProjectsTab({ projects, setProjects, clients, equipment, employees, settings }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [query, setQuery] = useState("");
@@ -778,6 +793,7 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees }) {
           equipment={equipment}
           employees={employees}
           projects={projects}
+          settings={settings}
           onClose={() => setShowForm(false)}
           onSave={(p) => {
             setProjects((prev) => {
@@ -802,7 +818,7 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees }) {
 
 // ---------- Finance Tab ----------
 
-function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
+function FinanceTab({ projects, setProjects, clients, equipment, employees, settings }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [periodFrom, setPeriodFrom] = useState("");
@@ -1088,6 +1104,7 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
           equipment={equipment}
           employees={employees}
           projects={projects}
+          settings={settings}
           onClose={() => setShowForm(false)}
           onSave={(p) => {
             setProjects((prev) => {
@@ -1108,9 +1125,10 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees }) {
 
 // ---------- Project Form (modal) ----------
 
-function ProjectForm({ project, defaultDate, clients, equipment, employees, projects, onClose, onSave, onDelete }) {
+function ProjectForm({ project, defaultDate, clients, equipment, employees, projects, settings, onClose, onSave, onDelete }) {
   const [name, setName] = useState(project?.name || "");
   const [clientId, setClientId] = useState(project?.clientId || clients[0]?.id || "");
+  const [location, setLocation] = useState(project?.location || "");
   const [startDate, setStartDate] = useState(project?.startDate || defaultDate || toISO(new Date()));
   const [endDate, setEndDate] = useState(project?.endDate || defaultDate || toISO(new Date()));
   const [status, setStatus] = useState(project?.status || "planned");
@@ -1121,6 +1139,7 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
   const [crew, setCrew] = useState(project?.crew || []);
   const [payments, setPayments] = useState(project?.payments || []);
   const [expenses, setExpenses] = useState(project?.expenses || []);
+  const [notifyState, setNotifyState] = useState("idle"); // idle | sending | sent | error
 
   const toggleCrew = (empId) => {
     setCrew((prev) => (prev.includes(empId) ? prev.filter((id) => id !== empId) : [...prev, empId]));
@@ -1167,12 +1186,63 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
 
   const canSave = name.trim() && clientId && startDate && endDate && startDate <= endDate;
 
+  const buildTelegramMessage = () => {
+    const clientN = clients.find((c) => c.id === clientId)?.name || "—";
+    const crewNames = crew.map((id) => employees.find((e) => e.id === id)?.name).filter(Boolean);
+    const responsibleName = employees.find((e) => e.id === responsibleId)?.name;
+    const itemLines = items
+      .map((it) => {
+        const eq = equipment.find((e) => e.id === it.equipmentId);
+        return eq ? `• ${eq.name} — ${it.qty} шт.` : null;
+      })
+      .filter(Boolean);
+    const lines = [
+      `🎪 Новий проект: ${name.trim()}`,
+      `Клієнт: ${clientN}`,
+      `Дати: ${fmtDate(startDate)} — ${fmtDate(endDate)}`,
+      location ? `Місце проведення: ${location}` : null,
+      responsibleName ? `Відповідальний: ${responsibleName}` : null,
+      crewNames.length ? `Бригада: ${crewNames.join(", ")}` : null,
+      itemLines.length ? `\nОбладнання:\n${itemLines.join("\n")}` : null,
+      notes ? `\nПримітки: ${notes}` : null,
+    ].filter(Boolean);
+    return lines.join("\n");
+  };
+
+  const sendTelegramNotifications = async () => {
+    const chatIds = [];
+    for (const empId of [responsibleId, ...crew]) {
+      const emp = employees.find((e) => e.id === empId);
+      if (emp?.telegramChatId) chatIds.push(emp.telegramChatId.trim());
+    }
+    if (settings?.telegramGroupChatId) chatIds.push(settings.telegramGroupChatId.trim());
+    const uniqueChatIds = [...new Set(chatIds.filter(Boolean))];
+    if (uniqueChatIds.length === 0) {
+      setNotifyState("error");
+      return;
+    }
+    setNotifyState("sending");
+    try {
+      const res = await fetch("/api/send-telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatIds: uniqueChatIds, message: buildTelegramMessage() }),
+      });
+      if (!res.ok) throw new Error("request failed");
+      setNotifyState("sent");
+    } catch (e) {
+      setNotifyState("error");
+    }
+  };
+
   const handleSave = () => {
     if (!canSave) return;
-    onSave({
+    const isNew = !project;
+    const savedProject = {
       id: project?.id || uid("pr"),
       name: name.trim(),
       clientId,
+      location: location.trim(),
       startDate,
       endDate,
       status,
@@ -1183,7 +1253,11 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
       crew,
       payments: payments.map((p) => ({ ...p, amount: Number(p.amount) || 0 })),
       expenses: expenses.map((e) => ({ ...e, amount: Number(e.amount) || 0 })),
-    });
+    };
+    onSave(savedProject);
+    if (isNew && (responsibleId || crew.length > 0)) {
+      sendTelegramNotifications();
+    }
   };
 
   return (
@@ -1258,6 +1332,24 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
             </Field>
           </div>
 
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={sendTelegramNotifications}
+              disabled={notifyState === "sending"}
+              className="flex items-center gap-1.5 text-xs font-medium border border-neutral-300 rounded-md px-2.5 py-1.5 hover:bg-neutral-50 disabled:opacity-50"
+            >
+              <Send size={12} />
+              {notifyState === "sending" ? "Надсилання…" : "Сповістити в Telegram"}
+            </button>
+            {notifyState === "sent" && <span className="text-xs text-emerald-600">Сповіщення надіслано</span>}
+            {notifyState === "error" && (
+              <span className="text-xs text-rose-500">
+                Не вдалось надіслати — перевірте Telegram ID у бригади чи групи
+              </span>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Дата початку">
               <input
@@ -1279,6 +1371,15 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
           {startDate > endDate && (
             <div className="text-xs text-rose-500 -mt-2">Дата завершення раніше дати початку</div>
           )}
+
+          <Field label="Місце проведення">
+            <input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Адреса або назва майданчика"
+              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </Field>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Статус">
@@ -1861,15 +1962,40 @@ function ClientForm({ client, onClose, onSave, onDelete }) {
 
 // ---------- Employees Tab ----------
 
-function EmployeesTab({ employees, setEmployees, projects }) {
+function EmployeesTab({ employees, setEmployees, projects, settings, setSettings }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [groupIdDraft, setGroupIdDraft] = useState(settings?.telegramGroupChatId || "");
 
   const projectCount = (empId) =>
     projects.filter((p) => p.responsibleId === empId || (p.crew || []).includes(empId)).length;
 
   return (
     <div>
+      <div className="bg-white border border-neutral-200 rounded-lg p-4 mb-4">
+        <div className="text-sm font-medium text-neutral-800 mb-1 flex items-center gap-1.5">
+          <Send size={14} /> Сповіщення в Telegram
+        </div>
+        <div className="text-xs text-neutral-500 mb-3">
+          Chat ID групи, куди дублюються сповіщення про нові проекти (необовʼязково — можна надсилати лише
+          особисто кожному співробітнику нижче).
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            value={groupIdDraft}
+            onChange={(e) => setGroupIdDraft(e.target.value)}
+            placeholder="Наприклад: -1001234567890"
+            className="flex-1 border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+          <button
+            onClick={() => setSettings((prev) => ({ ...prev, telegramGroupChatId: groupIdDraft.trim() }))}
+            className="text-sm font-medium px-3 py-2 rounded-md bg-neutral-900 text-white hover:bg-neutral-800"
+          >
+            Зберегти
+          </button>
+        </div>
+      </div>
+
       <div className="flex items-center justify-end mb-4">
         <button
           onClick={() => {
@@ -1908,6 +2034,11 @@ function EmployeesTab({ employees, setEmployees, projects }) {
               {em.phone && (
                 <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1.5">
                   <Phone size={12} /> {em.phone}
+                </div>
+              )}
+              {em.telegramChatId && (
+                <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1">
+                  <Send size={12} /> Telegram підключено
                 </div>
               )}
               {em.notes && (
@@ -1952,6 +2083,7 @@ function EmployeeForm({ employee, onClose, onSave, onDelete }) {
   const [name, setName] = useState(employee?.name || "");
   const [role, setRole] = useState(employee?.role || "");
   const [phone, setPhone] = useState(employee?.phone || "");
+  const [telegramChatId, setTelegramChatId] = useState(employee?.telegramChatId || "");
   const [notes, setNotes] = useState(employee?.notes || "");
 
   const canSave = name.trim();
@@ -1989,6 +2121,14 @@ function EmployeeForm({ employee, onClose, onSave, onDelete }) {
               className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </Field>
+          <Field label="Telegram Chat ID">
+            <input
+              value={telegramChatId}
+              onChange={(e) => setTelegramChatId(e.target.value)}
+              placeholder="Дізнатись через @userinfobot у Telegram"
+              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </Field>
           <Field label="Примітки">
             <textarea
               value={notes}
@@ -2020,6 +2160,7 @@ function EmployeeForm({ employee, onClose, onSave, onDelete }) {
                   name: name.trim(),
                   role: role.trim(),
                   phone: phone.trim(),
+                  telegramChatId: telegramChatId.trim(),
                   notes: notes.trim(),
                 })
               }
