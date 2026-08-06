@@ -643,6 +643,13 @@ function CalendarTab({ projects, clients, equipment, employees, settings, setPro
                 <div className="text-[11px] text-neutral-400 mt-1">
                   {fmtDate(p.startDate)} — {fmtDate(p.endDate)}
                 </div>
+                {(p.arrivalTime || p.readyTime) && (
+                  <div className="text-[11px] text-neutral-400 mt-0.5">
+                    {p.arrivalTime ? `Прибуття: ${p.arrivalTime}` : ""}
+                    {p.arrivalTime && p.readyTime ? " · " : ""}
+                    {p.readyTime ? `Готовність: ${p.readyTime}` : ""}
+                  </div>
+                )}
                 {p.responsibleId && (
                   <div className="text-[11px] text-neutral-400 mt-0.5">
                     Відп.: {employees.find((e) => e.id === p.responsibleId)?.name || "—"}
@@ -1129,6 +1136,8 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
   const [name, setName] = useState(project?.name || "");
   const [clientId, setClientId] = useState(project?.clientId || clients[0]?.id || "");
   const [location, setLocation] = useState(project?.location || "");
+  const [arrivalTime, setArrivalTime] = useState(project?.arrivalTime || "");
+  const [readyTime, setReadyTime] = useState(project?.readyTime || "");
   const [startDate, setStartDate] = useState(project?.startDate || defaultDate || toISO(new Date()));
   const [endDate, setEndDate] = useState(project?.endDate || defaultDate || toISO(new Date()));
   const [status, setStatus] = useState(project?.status || "planned");
@@ -1201,6 +1210,8 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
       `Клієнт: ${clientN}`,
       `Дати: ${fmtDate(startDate)} — ${fmtDate(endDate)}`,
       location ? `Місце проведення: ${location}` : null,
+      arrivalTime ? `Час прибуття на майданчик: ${arrivalTime}` : null,
+      readyTime ? `Час повної готовності / початку івенту: ${readyTime}` : null,
       responsibleName ? `Відповідальний: ${responsibleName}` : null,
       crewNames.length ? `Бригада: ${crewNames.join(", ")}` : null,
       itemLines.length ? `\nОбладнання:\n${itemLines.join("\n")}` : null,
@@ -1243,6 +1254,8 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
       name: name.trim(),
       clientId,
       location: location.trim(),
+      arrivalTime,
+      readyTime,
       startDate,
       endDate,
       status,
@@ -1380,6 +1393,25 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
               className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Час прибуття на майданчик">
+              <input
+                type="time"
+                value={arrivalTime}
+                onChange={(e) => setArrivalTime(e.target.value)}
+                className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </Field>
+            <Field label="Час готовності / початку">
+              <input
+                type="time"
+                value={readyTime}
+                onChange={(e) => setReadyTime(e.target.value)}
+                className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </Field>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Статус">
