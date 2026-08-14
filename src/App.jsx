@@ -487,7 +487,11 @@ function LoginScreen() {
     // email за фіксованим правилом: самі цифри + @phone.local. Саме
     // за цим правилом адміністратор має створювати такий обліковий
     // запис у Supabase.
-    const email = trimmed.includes("@") ? trimmed : trimmed.replace(/\D/g, "") + "@phone.local";
+    let digits = trimmed.replace(/\D/g, "");
+    if (digits.length === 10 && digits.startsWith("0")) {
+      digits = "38" + digits; // 0671234567 → 380671234567, як при +380671234567
+    }
+    const email = trimmed.includes("@") ? trimmed : digits + "@phone.local";
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
