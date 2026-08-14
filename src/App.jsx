@@ -1357,6 +1357,41 @@ function ProjectForm({
   const [responsibleId, setResponsibleId] = useState(project?.responsibleId || (selfService ? myEmployeeId || "" : ""));
   const [crew, setCrew] = useState(project?.crew || []);
   const [declinedBy, setDeclinedBy] = useState(project?.declinedBy || []);
+  const [documents, setDocuments] = useState(project?.documents || []);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [docError, setDocError] = useState("");
+
+  const handleUploadDoc = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !project) return;
+    setDocError("");
+    setUploadingDoc(true);
+    try {
+      const path = `${project.id}/${Date.now()}-${file.name}`;
+      const { error } = await supabase.storage.from("project-files").upload(path, file);
+      if (error) throw error;
+      const nextDocs = [...documents, { name: file.name, path, uploadedAt: new Date().toISOString() }];
+      setDocuments(nextDocs);
+      onSave({ ...project, documents: nextDocs });
+    } catch (err) {
+      setDocError("Не вдалось завантажити файл");
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleOpenDoc = async (doc) => {
+    const { data } = await supabase.storage.from("project-files").createSignedUrl(doc.path, 300);
+    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+  };
+
+  const handleDeleteDoc = async (doc) => {
+    await supabase.storage.from("project-files").remove([doc.path]);
+    const nextDocs = documents.filter((d) => d.path !== doc.path);
+    setDocuments(nextDocs);
+    onSave({ ...project, documents: nextDocs });
+  };
   const [payments, setPayments] = useState(project?.payments || []);
   const [expenses, setExpenses] = useState(project?.expenses || []);
   const [notifyState, setNotifyState] = useState("idle"); // idle | sending | sent | error
@@ -1446,17 +1481,22 @@ function ProjectForm({
 
   const sendTelegramNotifications = async () => {
     const chatIds = [];
-    for (const empId of [responsibleId, ...crew]) {
-      const emp = employees.find((e) => e.id === empId);
-      if (emp?.telegramChatId) chatIds.push(emp.telegramChatId.trim());
-    }
-    if (settings?.telegramGroupChatId) chatIds.push(settings.telegramGroupChatId.trim());
-    if (selfService && settings?.telegramAdminChatId) {
-      settings.telegramAdminChatId
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .forEach((id) => chatIds.push(id));
+    if (selfService) {
+      // Самостійні заявки технік бачить сам — йому й у спільну групу
+      // повідомляти не треба, тільки адмінів.
+      if (settings?.telegramAdminChatId) {
+        settings.telegramAdminChatId
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .forEach((id) => chatIds.push(id));
+      }
+    } else {
+      for (const empId of [responsibleId, ...crew]) {
+        const emp = employees.find((e) => e.id === empId);
+        if (emp?.telegramChatId) chatIds.push(emp.telegramChatId.trim());
+      }
+      if (settings?.telegramGroupChatId) chatIds.push(settings.telegramGroupChatId.trim());
     }
     const uniqueChatIds = [...new Set(chatIds.filter(Boolean))];
     if (uniqueChatIds.length === 0) {
@@ -1497,6 +1537,7 @@ function ProjectForm({
       responsibleId,
       crew,
       declinedBy,
+      documents,
       payments: payments.map((p) => ({ ...p, amount: Number(p.amount) || 0 })),
       expenses: expenses.map((e) => ({ ...e, amount: Number(e.amount) || 0 })),
     };
@@ -1912,6 +1953,48 @@ function ProjectForm({
             />
           </Field>
         </fieldset>
+
+        {project && (
+          <div className="px-5 pb-4">
+            <div className="text-xs font-medium text-neutral-500 mb-1.5">Документи</div>
+            {documents.length === 0 && (
+              <div className="text-xs text-neutral-400 mb-2">Файлів ще немає.</div>
+            )}
+            <div className="flex flex-col gap-1.5 mb-2">
+              {documents.map((doc) => (
+                <div
+                  key={doc.path}
+                  className="flex items-center justify-between gap-2 border border-neutral-200 rounded-md px-2.5 py-1.5 text-xs"
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleOpenDoc(doc)}
+                    className="text-neutral-700 hover:text-amber-600 truncate text-left underline decoration-dotted"
+                  >
+                    {doc.name}
+                  </button>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDoc(doc)}
+                      className="p-1 rounded hover:bg-neutral-100 text-neutral-400 shrink-0"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {!readOnly && (
+              <label className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-600 border border-dashed border-neutral-300 rounded-md px-2.5 py-1.5 cursor-pointer hover:bg-neutral-50">
+                <Plus size={12} />
+                {uploadingDoc ? "Завантаження…" : "Додати файл"}
+                <input type="file" className="hidden" onChange={handleUploadDoc} disabled={uploadingDoc} />
+              </label>
+            )}
+            {docError && <div className="text-xs text-rose-500 mt-1">{docError}</div>}
+          </div>
+        )}
 
         <div className="flex items-center justify-between px-5 py-3.5 border-t border-neutral-200 sticky bottom-0 bg-white">
           {onDelete && !readOnly ? (
