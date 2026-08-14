@@ -1978,11 +1978,13 @@ function ProjectForm({
                       className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                     >
                       <option value="">Кому — не вказано</option>
-                      {employees.map((em) => (
-                        <option key={em.id} value={em.id}>
-                          Кому: {em.name}
-                        </option>
-                      ))}
+                      {employees
+                        .filter((em) => em.id === responsibleId || crew.includes(em.id) || em.id === exp.employeeId)
+                        .map((em) => (
+                          <option key={em.id} value={em.id}>
+                            Кому: {em.name}
+                          </option>
+                        ))}
                     </select>
                   )}
                 </div>
