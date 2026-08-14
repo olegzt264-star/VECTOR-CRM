@@ -1629,6 +1629,12 @@ function ProjectForm({
             </Field>
           )}
 
+          {simplified && (
+            <div className="bg-neutral-50 border border-neutral-200 rounded-md px-3 py-2 text-sm text-neutral-700">
+              Взяв обладнання: <span className="font-medium">{employees.find((e) => e.id === responsibleId)?.name || "—"}</span>
+            </div>
+          )}
+
           {!simplified && (
             <div className="grid grid-cols-2 gap-3">
               <Field label="Відповідальний">
