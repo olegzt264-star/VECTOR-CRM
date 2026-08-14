@@ -717,11 +717,15 @@ function CalendarTab({ projects, clients, equipment, employees, settings, canVie
                 <div className="text-[11px] text-neutral-400 mt-1">
                   {fmtDate(p.startDate)} — {fmtDate(p.endDate)}
                 </div>
-                {(p.arrivalTime || p.readyTime) && (
+                {(p.warehouseTime || p.arrivalTime || p.readyTime) && (
                   <div className="text-[11px] text-neutral-400 mt-0.5">
-                    {p.arrivalTime ? `Прибуття: ${p.arrivalTime}` : ""}
-                    {p.arrivalTime && p.readyTime ? " · " : ""}
-                    {p.readyTime ? `Готовність: ${p.readyTime}` : ""}
+                    {[
+                      p.warehouseTime ? `Склад: ${p.warehouseTime}` : null,
+                      p.arrivalTime ? `Прибуття: ${p.arrivalTime}` : null,
+                      p.readyTime ? `Готовність: ${p.readyTime}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
                 )}
                 {p.responsibleId && (
@@ -1224,6 +1228,7 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
   const [name, setName] = useState(project?.name || "");
   const [clientId, setClientId] = useState(project?.clientId || clients[0]?.id || "");
   const [location, setLocation] = useState(project?.location || "");
+  const [warehouseTime, setWarehouseTime] = useState(project?.warehouseTime || "");
   const [arrivalTime, setArrivalTime] = useState(project?.arrivalTime || "");
   const [readyTime, setReadyTime] = useState(project?.readyTime || "");
   const [startDate, setStartDate] = useState(project?.startDate || defaultDate || toISO(new Date()));
@@ -1298,6 +1303,7 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
       `Клієнт: ${clientN}`,
       `Дати: ${fmtDate(startDate)} — ${fmtDate(endDate)}`,
       location ? `Місце проведення: ${location}` : null,
+      warehouseTime ? `Час прибуття на склад: ${warehouseTime}` : null,
       arrivalTime ? `Час прибуття на майданчик: ${arrivalTime}` : null,
       readyTime ? `Час повної готовності / початку івенту: ${readyTime}` : null,
       responsibleName ? `Відповідальний: ${responsibleName}` : null,
@@ -1342,6 +1348,7 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
       name: name.trim(),
       clientId,
       location: location.trim(),
+      warehouseTime,
       arrivalTime,
       readyTime,
       startDate,
@@ -1483,7 +1490,15 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Час прибуття на склад">
+              <input
+                type="time"
+                value={warehouseTime}
+                onChange={(e) => setWarehouseTime(e.target.value)}
+                className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </Field>
             <Field label="Час прибуття на майданчик">
               <input
                 type="time"
