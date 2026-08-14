@@ -1053,6 +1053,7 @@ function FinanceTab({
       expenses = 0,
       cash = 0,
       nonCash = 0;
+    const crewPayByEmployee = {};
     for (const p of filtered) {
       price += Number(p.price) || 0;
       paid += sum(p.payments || []);
@@ -1061,17 +1062,30 @@ function FinanceTab({
         if (pay.method === "Готівка") cash += Number(pay.amount) || 0;
         else nonCash += Number(pay.amount) || 0;
       }
+      for (const exp of p.expenses || []) {
+        if (exp.category === "Оплата бригади" && exp.employeeId) {
+          crewPayByEmployee[exp.employeeId] = (crewPayByEmployee[exp.employeeId] || 0) + (Number(exp.amount) || 0);
+        }
+      }
     }
+    const crewPayments = Object.entries(crewPayByEmployee)
+      .map(([employeeId, amount]) => ({
+        employeeId,
+        name: employees.find((e) => e.id === employeeId)?.name || "—",
+        amount,
+      }))
+      .sort((a, b) => b.amount - a.amount);
     return {
       price,
       paid,
       expenses,
       cash,
       nonCash,
+      crewPayments,
       remaining: Math.max(0, price - paid),
       profit: paid - expenses,
     };
-  }, [filtered]);
+  }, [filtered, employees]);
 
   const sorted = useMemo(() => {
     if (sortBy === "receivedBy") {
@@ -1249,6 +1263,20 @@ function FinanceTab({
         </div>
       </div>
 
+      {totals.crewPayments.length > 0 && (
+        <div className="bg-white border border-neutral-200 rounded-lg p-4 mb-5">
+          <div className="text-sm font-medium text-neutral-800 mb-2">Оплати бригаді (по відфільтрованих проектах)</div>
+          <div className="flex flex-col gap-1.5">
+            {totals.crewPayments.map((cp) => (
+              <div key={cp.employeeId} className="flex items-center justify-between text-sm">
+                <span className="text-neutral-600">{cp.name}</span>
+                <span className="font-medium text-neutral-800">{fmtMoney(cp.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* project list */}
       {sorted.length === 0 ? (
         <div className="text-sm text-neutral-400 py-16 text-center border border-dashed border-neutral-200 rounded-lg">
@@ -1412,7 +1440,10 @@ function ProjectForm({
   const removePayment = (idx) => setPayments((prev) => prev.filter((_, i) => i !== idx));
 
   const addExpense = () =>
-    setExpenses((prev) => [...prev, { id: uid("exp"), date: toISO(new Date()), amount: "", category: EXPENSE_CATEGORIES[0], note: "" }]);
+    setExpenses((prev) => [
+      ...prev,
+      { id: uid("exp"), date: toISO(new Date()), amount: "", category: EXPENSE_CATEGORIES[0], employeeId: "", note: "" },
+    ]);
   const updateExpense = (idx, patch) => setExpenses((prev) => prev.map((e, i) => (i === idx ? { ...e, ...patch } : e)));
   const removeExpense = (idx) => setExpenses((prev) => prev.filter((_, i) => i !== idx));
 
@@ -1910,34 +1941,50 @@ function ProjectForm({
           <Field label="Витрати по проекту">
             <div className="flex flex-col gap-2">
               {expenses.map((exp, idx) => (
-                <div key={exp.id} className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={exp.date}
-                    onChange={(e) => updateExpense(idx, { date: e.target.value })}
-                    className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  />
-                  <select
-                    value={exp.category}
-                    onChange={(e) => updateExpense(idx, { category: e.target.value })}
-                    className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  >
-                    {EXPENSE_CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    value={exp.amount}
-                    onChange={(e) => updateExpense(idx, { amount: e.target.value })}
-                    placeholder="Сума"
-                    className="w-24 border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  />
-                  <button onClick={() => removeExpense(idx)} className="p-1.5 rounded hover:bg-neutral-100 text-neutral-400 shrink-0">
-                    <Trash2 size={14} />
-                  </button>
+                <div key={exp.id} className="border border-neutral-200 rounded-md p-2 flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={exp.date}
+                      onChange={(e) => updateExpense(idx, { date: e.target.value })}
+                      className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                    <select
+                      value={exp.category}
+                      onChange={(e) => updateExpense(idx, { category: e.target.value })}
+                      className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    >
+                      {EXPENSE_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      value={exp.amount}
+                      onChange={(e) => updateExpense(idx, { amount: e.target.value })}
+                      placeholder="Сума"
+                      className="w-24 border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                    <button onClick={() => removeExpense(idx)} className="p-1.5 rounded hover:bg-neutral-100 text-neutral-400 shrink-0">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  {exp.category === "Оплата бригади" && (
+                    <select
+                      value={exp.employeeId || ""}
+                      onChange={(e) => updateExpense(idx, { employeeId: e.target.value })}
+                      className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    >
+                      <option value="">Кому — не вказано</option>
+                      {employees.map((em) => (
+                        <option key={em.id} value={em.id}>
+                          Кому: {em.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               ))}
               <button
