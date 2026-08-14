@@ -110,6 +110,7 @@ function CRMApp({ onLogout, profile }) {
   const isAdmin = !!profile?.isAdmin;
   const allowedTabIds = profile?.allowedTabs || [];
   const canViewFinancials = isAdmin || !!profile?.canViewFinancials;
+  const canEdit = isAdmin || !!profile?.canEdit;
   const [tab, setTab] = useState("calendar");
   const [equipment, setEquipment] = useState(seedEquipment);
   const [clients, setClients] = useState(seedClients);
@@ -360,6 +361,7 @@ function CRMApp({ onLogout, profile }) {
             employees={employees}
             settings={settings}
             canViewFinancials={canViewFinancials}
+            canEdit={canEdit}
             setProjects={setProjects}
           />
         ) : tab === "projects" ? (
@@ -383,7 +385,7 @@ function CRMApp({ onLogout, profile }) {
             canViewFinancials={canViewFinancials}
           />
         ) : tab === "inventory" ? (
-          <InventoryTab equipment={equipment} setEquipment={setEquipment} projects={projects} />
+          <InventoryTab equipment={equipment} setEquipment={setEquipment} projects={projects} canEdit={canEdit} />
         ) : tab === "employees" ? (
           <EmployeesTab
             employees={employees}
@@ -430,12 +432,19 @@ export default function App() {
             isAdmin: !!data.is_admin,
             allowedTabs: data.allowed_tabs || [],
             canViewFinancials: !!data.can_view_financials,
+            canEdit: !!data.is_admin || !!data.can_edit,
           });
         } else {
           // Немає рядка ролі — з міркувань безпеки за замовчуванням
-          // мінімальний доступ (тільки календар, без фінансів), доки
+          // доступ лише на перегляд календаря і складу, без фінансів
+          // і без права щось редагувати чи додавати, доки
           // адміністратор явно не налаштує права в Supabase.
-          setProfile({ isAdmin: false, allowedTabs: ["calendar"], canViewFinancials: false });
+          setProfile({
+            isAdmin: false,
+            allowedTabs: ["calendar", "inventory"],
+            canViewFinancials: false,
+            canEdit: false,
+          });
         }
       });
   }, [session]);
@@ -464,7 +473,7 @@ export default function App() {
 }
 
 function LoginScreen() {
-  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -473,12 +482,18 @@ function LoginScreen() {
     e.preventDefault();
     setError("");
     setLoading(true);
+    const trimmed = login.trim();
+    // Якщо вписано номер телефону (без @) — перетворюємо на технічний
+    // email за фіксованим правилом: самі цифри + @phone.local. Саме
+    // за цим правилом адміністратор має створювати такий обліковий
+    // запис у Supabase.
+    const email = trimmed.includes("@") ? trimmed : trimmed.replace(/\D/g, "") + "@phone.local";
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
       setError(
         error.message === "Invalid login credentials"
-          ? "Невірний email або пароль."
+          ? "Невірний логін або пароль."
           : "Не вдалося увійти. Спробуйте ще раз."
       );
     }
@@ -498,13 +513,14 @@ function LoginScreen() {
         </div>
 
         <div className="flex flex-col gap-3">
-          <Field label="Email">
+          <Field label="Email або номер телефону">
             <input
-              type="email"
+              type="text"
               required
               autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              placeholder="380671234567 або name@example.com"
               className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </Field>
@@ -550,7 +566,7 @@ function computeUsage(projects, equipmentId, start, end, excludeProjectId) {
 
 // ---------- Calendar Tab ----------
 
-function CalendarTab({ projects, clients, equipment, employees, settings, canViewFinancials, setProjects }) {
+function CalendarTab({ projects, clients, equipment, employees, settings, canViewFinancials, canEdit, setProjects }) {
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => toISO(new Date()));
   const [showForm, setShowForm] = useState(false);
@@ -662,15 +678,17 @@ function CalendarTab({ projects, clients, equipment, employees, settings, canVie
       <div className="bg-white border border-neutral-200 rounded-lg p-4 h-fit">
         <div className="flex items-center justify-between mb-3">
           <div className="font-semibold text-sm text-neutral-800">{fmtDate(selectedDate)}</div>
-          <button
-            onClick={() => {
-              setEditing(null);
-              setShowForm(true);
-            }}
-            className="flex items-center gap-1 text-xs font-medium bg-neutral-900 text-white px-2.5 py-1.5 rounded-md hover:bg-neutral-800"
-          >
-            <Plus size={13} /> Проект
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => {
+                setEditing(null);
+                setShowForm(true);
+              }}
+              className="flex items-center gap-1 text-xs font-medium bg-neutral-900 text-white px-2.5 py-1.5 rounded-md hover:bg-neutral-800"
+            >
+              <Plus size={13} /> Проект
+            </button>
+          )}
         </div>
         {selectedProjects.length === 0 ? (
           <div className="text-sm text-neutral-400 py-6 text-center">Нічого не заплановано</div>
@@ -724,6 +742,7 @@ function CalendarTab({ projects, clients, equipment, employees, settings, canVie
           settings={settings}
           canViewFinancials={canViewFinancials}
           onClose={() => setShowForm(false)}
+          readOnly={!canEdit}
           onSave={(p) => {
             setProjects((prev) => {
               const exists = prev.some((x) => x.id === p.id);
@@ -1197,7 +1216,7 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees, sett
 
 // ---------- Project Form (modal) ----------
 
-function ProjectForm({ project, defaultDate, clients, equipment, employees, projects, settings, canViewFinancials, onClose, onSave, onDelete }) {
+function ProjectForm({ project, defaultDate, clients, equipment, employees, projects, settings, canViewFinancials, readOnly, onClose, onSave, onDelete }) {
   const [name, setName] = useState(project?.name || "");
   const [clientId, setClientId] = useState(project?.clientId || clients[0]?.id || "");
   const [location, setLocation] = useState(project?.location || "");
@@ -1352,7 +1371,7 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
           </button>
         </div>
 
-        <div className="p-5 flex flex-col gap-3.5">
+        <fieldset disabled={readOnly} className="p-5 flex flex-col gap-3.5 border-0 m-0 min-w-0 disabled:opacity-70">
           <Field label="Назва проекту">
             <input
               value={name}
@@ -1692,10 +1711,10 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
               className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
             />
           </Field>
-        </div>
+        </fieldset>
 
         <div className="flex items-center justify-between px-5 py-3.5 border-t border-neutral-200 sticky bottom-0 bg-white">
-          {onDelete ? (
+          {onDelete && !readOnly ? (
             <button
               onClick={() => onDelete(project.id)}
               className="text-sm text-rose-500 hover:text-rose-600 font-medium flex items-center gap-1"
@@ -1707,15 +1726,17 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
           )}
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="text-sm px-3 py-2 rounded-md text-neutral-600 hover:bg-neutral-100">
-              Скасувати
+              {readOnly ? "Закрити" : "Скасувати"}
             </button>
-            <button
-              onClick={handleSave}
-              disabled={!canSave}
-              className="text-sm font-medium px-3.5 py-2 rounded-md bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-40"
-            >
-              Зберегти
-            </button>
+            {!readOnly && (
+              <button
+                onClick={handleSave}
+                disabled={!canSave}
+                className="text-sm font-medium px-3.5 py-2 rounded-md bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-40"
+              >
+                Зберегти
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1734,7 +1755,7 @@ function Field({ label, children }) {
 
 // ---------- Inventory Tab ----------
 
-function InventoryTab({ equipment, setEquipment, projects }) {
+function InventoryTab({ equipment, setEquipment, projects, canEdit }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -1757,15 +1778,17 @@ function InventoryTab({ equipment, setEquipment, projects }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm text-neutral-500">Наявність обладнання показана на сьогодні ({fmtDate(todayISO)})</div>
-        <button
-          onClick={() => {
-            setEditing(null);
-            setShowForm(true);
-          }}
-          className="flex items-center gap-1.5 text-sm font-medium bg-neutral-900 text-white px-3 py-2 rounded-md hover:bg-neutral-800"
-        >
-          <Plus size={15} /> Обладнання
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => {
+              setEditing(null);
+              setShowForm(true);
+            }}
+            className="flex items-center gap-1.5 text-sm font-medium bg-neutral-900 text-white px-3 py-2 rounded-md hover:bg-neutral-800"
+          >
+            <Plus size={15} /> Обладнання
+          </button>
+        )}
       </div>
 
       {equipment.length === 0 ? (
@@ -1781,14 +1804,21 @@ function InventoryTab({ equipment, setEquipment, projects }) {
                 {items.map((eq) => {
                   const usedToday = computeUsage(projects, eq.id, todayISO, todayISO, null);
                   const available = eq.qty - usedToday;
+                  const Tag = canEdit ? "button" : "div";
                   return (
-                    <button
+                    <Tag
                       key={eq.id}
-                      onClick={() => {
-                        setEditing(eq);
-                        setShowForm(true);
-                      }}
-                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-neutral-50 text-left"
+                      onClick={
+                        canEdit
+                          ? () => {
+                              setEditing(eq);
+                              setShowForm(true);
+                            }
+                          : undefined
+                      }
+                      className={`w-full flex items-center justify-between px-4 py-3 text-left ${
+                        canEdit ? "hover:bg-neutral-50" : ""
+                      }`}
                     >
                       <span className="text-sm font-medium text-neutral-800">{eq.name}</span>
                       <div className="flex items-center gap-4 text-xs">
@@ -1805,7 +1835,7 @@ function InventoryTab({ equipment, setEquipment, projects }) {
                           Вільно сьогодні: {available}
                         </span>
                       </div>
-                    </button>
+                    </Tag>
                   );
                 })}
               </div>
