@@ -1004,7 +1004,7 @@ function FinanceTab({
   const [periodFrom, setPeriodFrom] = useState("");
   const [periodTo, setPeriodTo] = useState("");
   const [clientFilter, setClientFilter] = useState("all");
-  const [responsibleFilter, setResponsibleFilter] = useState("all");
+  const [receivedByFilter, setReceivedByFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [methodFilter, setMethodFilter] = useState("all");
   const [sortBy, setSortBy] = useState("date");
@@ -1040,12 +1040,12 @@ function FinanceTab({
       if (periodFrom && p.startDate < periodFrom) return false;
       if (periodTo && p.startDate > periodTo) return false;
       if (clientFilter !== "all" && p.clientId !== clientFilter) return false;
-      if (responsibleFilter !== "all" && p.responsibleId !== responsibleFilter) return false;
+      if (receivedByFilter !== "all" && p.receivedById !== receivedByFilter) return false;
       if (statusFilter !== "all" && paymentStatus(p) !== statusFilter) return false;
       if (methodFilter !== "all" && !(p.payments || []).some((pay) => pay.method === methodFilter)) return false;
       return true;
     });
-  }, [projects, periodFrom, periodTo, clientFilter, responsibleFilter, statusFilter, methodFilter]);
+  }, [projects, periodFrom, periodTo, clientFilter, receivedByFilter, statusFilter, methodFilter]);
 
   const totals = useMemo(() => {
     let price = 0,
@@ -1074,10 +1074,10 @@ function FinanceTab({
   }, [filtered]);
 
   const sorted = useMemo(() => {
-    if (sortBy === "responsible") {
+    if (sortBy === "receivedBy") {
       return [...filtered].sort((a, b) => {
-        const na = employeeName(a.responsibleId);
-        const nb = employeeName(b.responsibleId);
+        const na = employeeName(a.receivedById);
+        const nb = employeeName(b.receivedById);
         if (!na && nb) return 1;
         if (na && !nb) return -1;
         const cmp = na.localeCompare(nb, "uk");
@@ -1098,7 +1098,7 @@ function FinanceTab({
     periodFrom ||
     periodTo ||
     clientFilter !== "all" ||
-    responsibleFilter !== "all" ||
+    receivedByFilter !== "all" ||
     statusFilter !== "all" ||
     methodFilter !== "all";
 
@@ -1144,13 +1144,13 @@ function FinanceTab({
             ))}
           </select>
         </Field>
-        <Field label="Відповідальний">
+        <Field label="Хто отримав гроші">
           <select
-            value={responsibleFilter}
-            onChange={(e) => setResponsibleFilter(e.target.value)}
+            value={receivedByFilter}
+            onChange={(e) => setReceivedByFilter(e.target.value)}
             className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
-            <option value="all">Усі відповідальні</option>
+            <option value="all">Усі</option>
             {employees.map((em) => (
               <option key={em.id} value={em.id}>
                 {em.name}
@@ -1188,7 +1188,7 @@ function FinanceTab({
             className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
             <option value="date">За датою (найближчі спочатку)</option>
-            <option value="responsible">За відповідальним</option>
+            <option value="receivedBy">За тим, хто отримав гроші</option>
           </select>
         </Field>
         {hasFilters && (
@@ -1197,7 +1197,7 @@ function FinanceTab({
               setPeriodFrom("");
               setPeriodTo("");
               setClientFilter("all");
-              setResponsibleFilter("all");
+              setReceivedByFilter("all");
               setStatusFilter("all");
               setMethodFilter("all");
             }}
@@ -1278,7 +1278,7 @@ function FinanceTab({
                   </div>
                   <div className="text-xs text-neutral-500 mt-1">
                     {clientName(p)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)}
-                    {p.responsibleId ? ` · Відп.: ${employeeName(p.responsibleId) || "—"}` : ""}
+                    {p.receivedById ? ` · Отримав: ${employeeName(p.receivedById) || "—"}` : ""}
                   </div>
                 </div>
                 <div className="text-right shrink-0">
@@ -1355,6 +1355,7 @@ function ProjectForm({
   const [notes, setNotes] = useState(project?.notes || "");
   const [items, setItems] = useState(project?.items || []);
   const [responsibleId, setResponsibleId] = useState(project?.responsibleId || (selfService ? myEmployeeId || "" : ""));
+  const [receivedById, setReceivedById] = useState(project?.receivedById || "");
   const [crew, setCrew] = useState(project?.crew || []);
   const [declinedBy, setDeclinedBy] = useState(project?.declinedBy || []);
   const [documents, setDocuments] = useState(project?.documents || []);
@@ -1535,6 +1536,7 @@ function ProjectForm({
       notes,
       items,
       responsibleId,
+      receivedById,
       crew,
       declinedBy,
       documents,
@@ -1832,6 +1834,21 @@ function ProjectForm({
 
           {canViewFinancials && (
             <>
+              <Field label="Хто отримав гроші">
+                <select
+                  value={receivedById}
+                  onChange={(e) => setReceivedById(e.target.value)}
+                  className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                >
+                  <option value="">Не вказано</option>
+                  {employees.map((em) => (
+                    <option key={em.id} value={em.id}>
+                      {em.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
               <Field label="Оплати від клієнта">
                 <div className="flex flex-col gap-2">
                   {payments.map((p, idx) => (
