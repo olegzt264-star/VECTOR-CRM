@@ -106,7 +106,10 @@ const seedEmployees = [
 
 // ---------- main app ----------
 
-function CRMApp({ onLogout }) {
+function CRMApp({ onLogout, profile }) {
+  const isAdmin = !!profile?.isAdmin;
+  const allowedTabIds = profile?.allowedTabs || [];
+  const canViewFinancials = isAdmin || !!profile?.canViewFinancials;
   const [tab, setTab] = useState("calendar");
   const [equipment, setEquipment] = useState(seedEquipment);
   const [clients, setClients] = useState(seedClients);
@@ -277,7 +280,7 @@ function CRMApp({ onLogout }) {
     };
   }, []);
 
-  const tabs = [
+  const allTabs = [
     { id: "calendar", label: "Календар", icon: CalendarIcon },
     { id: "projects", label: "Проекти", icon: Briefcase },
     { id: "finance", label: "Фінанси", icon: Wallet },
@@ -285,6 +288,13 @@ function CRMApp({ onLogout }) {
     { id: "employees", label: "Співробітники", icon: Wrench },
     { id: "clients", label: "Клієнти", icon: Users },
   ];
+  const tabs = isAdmin ? allTabs : allTabs.filter((t) => allowedTabIds.includes(t.id));
+
+  useEffect(() => {
+    if (tabs.length > 0 && !tabs.some((t) => t.id === tab)) {
+      setTab(tabs[0].id);
+    }
+  }, [tabs, tab]);
 
   return (
     <div className="w-full h-full min-h-[700px] bg-neutral-50 text-neutral-900 flex flex-col">
@@ -338,6 +348,10 @@ function CRMApp({ onLogout }) {
       <div className="flex-1 max-w-6xl w-full mx-auto px-5 py-6">
         {!loaded ? (
           <div className="text-sm text-neutral-400 py-20 text-center">Завантаження…</div>
+        ) : tabs.length === 0 ? (
+          <div className="text-sm text-neutral-400 py-20 text-center">
+            Вам ще не надано доступ до жодного розділу. Зверніться до адміністратора.
+          </div>
         ) : tab === "calendar" ? (
           <CalendarTab
             projects={projects}
@@ -345,6 +359,7 @@ function CRMApp({ onLogout }) {
             equipment={equipment}
             employees={employees}
             settings={settings}
+            canViewFinancials={canViewFinancials}
             setProjects={setProjects}
           />
         ) : tab === "projects" ? (
@@ -355,6 +370,7 @@ function CRMApp({ onLogout }) {
             equipment={equipment}
             employees={employees}
             settings={settings}
+            canViewFinancials={canViewFinancials}
           />
         ) : tab === "finance" ? (
           <FinanceTab
@@ -364,6 +380,7 @@ function CRMApp({ onLogout }) {
             equipment={equipment}
             employees={employees}
             settings={settings}
+            canViewFinancials={canViewFinancials}
           />
         ) : tab === "inventory" ? (
           <InventoryTab equipment={equipment} setEquipment={setEquipment} projects={projects} />
@@ -387,6 +404,7 @@ function CRMApp({ onLogout }) {
 
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = ще перевіряємо
+  const [profile, setProfile] = useState(undefined); // undefined = ще завантажуємо роль
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -395,6 +413,32 @@ export default function App() {
     });
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!session) {
+      setProfile(undefined);
+      return;
+    }
+    supabase
+      .from("user_roles")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setProfile({
+            isAdmin: !!data.is_admin,
+            allowedTabs: data.allowed_tabs || [],
+            canViewFinancials: !!data.can_view_financials,
+          });
+        } else {
+          // Немає рядка ролі — з міркувань безпеки за замовчуванням
+          // мінімальний доступ (тільки календар, без фінансів), доки
+          // адміністратор явно не налаштує права в Supabase.
+          setProfile({ isAdmin: false, allowedTabs: ["calendar"], canViewFinancials: false });
+        }
+      });
+  }, [session]);
 
   if (session === undefined) {
     return (
@@ -408,7 +452,15 @@ export default function App() {
     return <LoginScreen />;
   }
 
-  return <CRMApp onLogout={() => supabase.auth.signOut()} />;
+  if (profile === undefined) {
+    return (
+      <div className="w-full h-full min-h-[700px] bg-neutral-50 flex items-center justify-center text-sm text-neutral-400">
+        Завантаження…
+      </div>
+    );
+  }
+
+  return <CRMApp onLogout={() => supabase.auth.signOut()} profile={profile} />;
 }
 
 function LoginScreen() {
@@ -498,7 +550,7 @@ function computeUsage(projects, equipmentId, start, end, excludeProjectId) {
 
 // ---------- Calendar Tab ----------
 
-function CalendarTab({ projects, clients, equipment, employees, settings, setProjects }) {
+function CalendarTab({ projects, clients, equipment, employees, settings, canViewFinancials, setProjects }) {
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => toISO(new Date()));
   const [showForm, setShowForm] = useState(false);
@@ -670,6 +722,7 @@ function CalendarTab({ projects, clients, equipment, employees, settings, setPro
           employees={employees}
           projects={projects}
           settings={settings}
+          canViewFinancials={canViewFinancials}
           onClose={() => setShowForm(false)}
           onSave={(p) => {
             setProjects((prev) => {
@@ -694,7 +747,7 @@ function CalendarTab({ projects, clients, equipment, employees, settings, setPro
 
 // ---------- Projects Tab ----------
 
-function ProjectsTab({ projects, setProjects, clients, equipment, employees, settings }) {
+function ProjectsTab({ projects, setProjects, clients, equipment, employees, settings, canViewFinancials }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [query, setQuery] = useState("");
@@ -782,12 +835,14 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees, set
                   {clientName(p.clientId)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)} · {p.items.length} позицій
                 </div>
               </div>
-              <div className="text-right shrink-0">
-                <div className="text-sm font-medium text-neutral-700">{fmtMoney(p.price)}</div>
-                <div className={`text-[11px] ${sum(p.payments || []) >= p.price && p.price > 0 ? "text-emerald-600" : "text-neutral-400"}`}>
-                  Отримано: {fmtMoney(sum(p.payments || []))}
+              {canViewFinancials && (
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-medium text-neutral-700">{fmtMoney(p.price)}</div>
+                  <div className={`text-[11px] ${sum(p.payments || []) >= p.price && p.price > 0 ? "text-emerald-600" : "text-neutral-400"}`}>
+                    Отримано: {fmtMoney(sum(p.payments || []))}
+                  </div>
                 </div>
-              </div>
+              )}
             </button>
           ))}
         </div>
@@ -801,6 +856,7 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees, set
           employees={employees}
           projects={projects}
           settings={settings}
+          canViewFinancials={canViewFinancials}
           onClose={() => setShowForm(false)}
           onSave={(p) => {
             setProjects((prev) => {
@@ -825,7 +881,7 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees, set
 
 // ---------- Finance Tab ----------
 
-function FinanceTab({ projects, setProjects, clients, equipment, employees, settings }) {
+function FinanceTab({ projects, setProjects, clients, equipment, employees, settings, canViewFinancials }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [periodFrom, setPeriodFrom] = useState("");
@@ -919,6 +975,14 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees, sett
     responsibleFilter !== "all" ||
     statusFilter !== "all" ||
     methodFilter !== "all";
+
+  if (!canViewFinancials) {
+    return (
+      <div className="text-sm text-neutral-400 py-20 text-center border border-dashed border-neutral-200 rounded-lg">
+        У вас немає доступу до фінансової інформації.
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -1112,6 +1176,7 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees, sett
           employees={employees}
           projects={projects}
           settings={settings}
+          canViewFinancials={canViewFinancials}
           onClose={() => setShowForm(false)}
           onSave={(p) => {
             setProjects((prev) => {
@@ -1132,7 +1197,7 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees, sett
 
 // ---------- Project Form (modal) ----------
 
-function ProjectForm({ project, defaultDate, clients, equipment, employees, projects, settings, onClose, onSave, onDelete }) {
+function ProjectForm({ project, defaultDate, clients, equipment, employees, projects, settings, canViewFinancials, onClose, onSave, onDelete }) {
   const [name, setName] = useState(project?.name || "");
   const [clientId, setClientId] = useState(project?.clientId || clients[0]?.id || "");
   const [location, setLocation] = useState(project?.location || "");
@@ -1428,15 +1493,17 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
                 ))}
               </select>
             </Field>
-            <Field label="Сума, грн">
-              <input
-                type="number"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="0"
-                className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-              />
-            </Field>
+            {canViewFinancials && (
+              <Field label="Сума, грн">
+                <input
+                  type="number"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="0"
+                  className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </Field>
+            )}
           </div>
 
           <Field label="Обладнання">
@@ -1503,18 +1570,20 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
             </div>
           )}
 
-          <Field label="Оплати від клієнта">
-            <div className="flex flex-col gap-2">
-              {payments.map((p, idx) => (
-                <div key={p.id} className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={p.date}
-                    onChange={(e) => updatePayment(idx, { date: e.target.value })}
-                    className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  />
-                  <select
-                    value={p.method || PAYMENT_METHODS[0]}
+          {canViewFinancials && (
+            <>
+              <Field label="Оплати від клієнта">
+                <div className="flex flex-col gap-2">
+                  {payments.map((p, idx) => (
+                    <div key={p.id} className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={p.date}
+                        onChange={(e) => updatePayment(idx, { date: e.target.value })}
+                        className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                      <select
+                        value={p.method || PAYMENT_METHODS[0]}
                     onChange={(e) => updatePayment(idx, { method: e.target.value })}
                     className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                   >
@@ -1611,6 +1680,8 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
               {fmtMoney(totalPaid - totalExpenses)}
             </div>
           </div>
+            </>
+          )}
 
           <Field label="Примітки">
             <textarea
