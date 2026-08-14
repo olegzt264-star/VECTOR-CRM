@@ -373,6 +373,7 @@ function CRMApp({ onLogout, profile }) {
             employees={employees}
             settings={settings}
             canViewFinancials={canViewFinancials}
+            canEdit={canEdit}
           />
         ) : tab === "finance" ? (
           <FinanceTab
@@ -383,6 +384,7 @@ function CRMApp({ onLogout, profile }) {
             employees={employees}
             settings={settings}
             canViewFinancials={canViewFinancials}
+            canEdit={canEdit}
           />
         ) : tab === "inventory" ? (
           <InventoryTab equipment={equipment} setEquipment={setEquipment} projects={projects} canEdit={canEdit} />
@@ -393,9 +395,10 @@ function CRMApp({ onLogout, profile }) {
             projects={projects}
             settings={settings}
             setSettings={setSettings}
+            canEdit={canEdit}
           />
         ) : (
-          <ClientsTab clients={clients} setClients={setClients} projects={projects} />
+          <ClientsTab clients={clients} setClients={setClients} projects={projects} canEdit={canEdit} />
         )}
       </div>
     </div>
@@ -774,7 +777,7 @@ function CalendarTab({ projects, clients, equipment, employees, settings, canVie
 
 // ---------- Projects Tab ----------
 
-function ProjectsTab({ projects, setProjects, clients, equipment, employees, settings, canViewFinancials }) {
+function ProjectsTab({ projects, setProjects, clients, equipment, employees, settings, canViewFinancials, canEdit }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [query, setQuery] = useState("");
@@ -825,15 +828,17 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees, set
             ))}
           </select>
         </div>
-        <button
-          onClick={() => {
-            setEditing(null);
-            setShowForm(true);
-          }}
-          className="flex items-center gap-1.5 text-sm font-medium bg-neutral-900 text-white px-3 py-2 rounded-md hover:bg-neutral-800"
-        >
-          <Plus size={15} /> Новий проект
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => {
+              setEditing(null);
+              setShowForm(true);
+            }}
+            className="flex items-center gap-1.5 text-sm font-medium bg-neutral-900 text-white px-3 py-2 rounded-md hover:bg-neutral-800"
+          >
+            <Plus size={15} /> Новий проект
+          </button>
+        )}
       </div>
 
       {sorted.length === 0 ? (
@@ -884,6 +889,7 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees, set
           projects={projects}
           settings={settings}
           canViewFinancials={canViewFinancials}
+          readOnly={!canEdit}
           onClose={() => setShowForm(false)}
           onSave={(p) => {
             setProjects((prev) => {
@@ -908,7 +914,7 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees, set
 
 // ---------- Finance Tab ----------
 
-function FinanceTab({ projects, setProjects, clients, equipment, employees, settings, canViewFinancials }) {
+function FinanceTab({ projects, setProjects, clients, equipment, employees, settings, canViewFinancials, canEdit }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [periodFrom, setPeriodFrom] = useState("");
@@ -1204,6 +1210,7 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees, sett
           projects={projects}
           settings={settings}
           canViewFinancials={canViewFinancials}
+          readOnly={!canEdit}
           onClose={() => setShowForm(false)}
           onSave={(p) => {
             setProjects((prev) => {
@@ -1964,7 +1971,7 @@ function EquipmentForm({ equipment, onClose, onSave, onDelete }) {
 
 // ---------- Clients Tab ----------
 
-function ClientsTab({ clients, setClients, projects }) {
+function ClientsTab({ clients, setClients, projects, canEdit }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -1972,17 +1979,19 @@ function ClientsTab({ clients, setClients, projects }) {
 
   return (
     <div>
-      <div className="flex items-center justify-end mb-4">
-        <button
-          onClick={() => {
-            setEditing(null);
-            setShowForm(true);
-          }}
-          className="flex items-center gap-1.5 text-sm font-medium bg-neutral-900 text-white px-3 py-2 rounded-md hover:bg-neutral-800"
-        >
-          <Plus size={15} /> Клієнт
-        </button>
-      </div>
+      {canEdit && (
+        <div className="flex items-center justify-end mb-4">
+          <button
+            onClick={() => {
+              setEditing(null);
+              setShowForm(true);
+            }}
+            className="flex items-center gap-1.5 text-sm font-medium bg-neutral-900 text-white px-3 py-2 rounded-md hover:bg-neutral-800"
+          >
+            <Plus size={15} /> Клієнт
+          </button>
+        </div>
+      )}
 
       {clients.length === 0 ? (
         <div className="text-sm text-neutral-400 py-16 text-center border border-dashed border-neutral-200 rounded-lg">
@@ -1990,35 +1999,44 @@ function ClientsTab({ clients, setClients, projects }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {clients.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => {
-                setEditing(c);
-                setShowForm(true);
-              }}
-              className="text-left bg-white border border-neutral-200 rounded-lg p-4 hover:border-neutral-300 hover:shadow-sm transition-all"
-            >
-              <div className="font-medium text-neutral-800">{c.name}</div>
-              {c.phone && (
-                <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1.5">
-                  <Phone size={12} /> {c.phone}
+          {clients.map((c) => {
+            const Tag = canEdit ? "button" : "div";
+            return (
+              <Tag
+                key={c.id}
+                onClick={
+                  canEdit
+                    ? () => {
+                        setEditing(c);
+                        setShowForm(true);
+                      }
+                    : undefined
+                }
+                className={`text-left bg-white border border-neutral-200 rounded-lg p-4 ${
+                  canEdit ? "hover:border-neutral-300 hover:shadow-sm transition-all" : ""
+                }`}
+              >
+                <div className="font-medium text-neutral-800">{c.name}</div>
+                {c.phone && (
+                  <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1.5">
+                    <Phone size={12} /> {c.phone}
+                  </div>
+                )}
+                {c.notes && (
+                  <div className="flex items-start gap-1.5 text-xs text-neutral-400 mt-1">
+                    <StickyNote size={12} className="mt-0.5 shrink-0" /> <span className="line-clamp-2">{c.notes}</span>
+                  </div>
+                )}
+                <div className="text-[11px] text-neutral-400 mt-2 pt-2 border-t border-neutral-100">
+                  Проектів: {projectCount(c.id)}
                 </div>
-              )}
-              {c.notes && (
-                <div className="flex items-start gap-1.5 text-xs text-neutral-400 mt-1">
-                  <StickyNote size={12} className="mt-0.5 shrink-0" /> <span className="line-clamp-2">{c.notes}</span>
-                </div>
-              )}
-              <div className="text-[11px] text-neutral-400 mt-2 pt-2 border-t border-neutral-100">
-                Проектів: {projectCount(c.id)}
-              </div>
-            </button>
-          ))}
+              </Tag>
+            );
+          })}
         </div>
       )}
 
-      {showForm && (
+      {showForm && canEdit && (
         <ClientForm
           client={editing}
           onClose={() => setShowForm(false)}
@@ -2115,7 +2133,7 @@ function ClientForm({ client, onClose, onSave, onDelete }) {
 
 // ---------- Employees Tab ----------
 
-function EmployeesTab({ employees, setEmployees, projects, settings, setSettings }) {
+function EmployeesTab({ employees, setEmployees, projects, settings, setSettings, canEdit }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [groupIdDraft, setGroupIdDraft] = useState(settings?.telegramGroupChatId || "");
@@ -2137,29 +2155,34 @@ function EmployeesTab({ employees, setEmployees, projects, settings, setSettings
           <input
             value={groupIdDraft}
             onChange={(e) => setGroupIdDraft(e.target.value)}
+            disabled={!canEdit}
             placeholder="Наприклад: -1001234567890"
-            className="flex-1 border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            className="flex-1 border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
           />
-          <button
-            onClick={() => setSettings((prev) => ({ ...prev, telegramGroupChatId: groupIdDraft.trim() }))}
-            className="text-sm font-medium px-3 py-2 rounded-md bg-neutral-900 text-white hover:bg-neutral-800"
-          >
-            Зберегти
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => setSettings((prev) => ({ ...prev, telegramGroupChatId: groupIdDraft.trim() }))}
+              className="text-sm font-medium px-3 py-2 rounded-md bg-neutral-900 text-white hover:bg-neutral-800"
+            >
+              Зберегти
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="flex items-center justify-end mb-4">
-        <button
-          onClick={() => {
-            setEditing(null);
-            setShowForm(true);
-          }}
-          className="flex items-center gap-1.5 text-sm font-medium bg-neutral-900 text-white px-3 py-2 rounded-md hover:bg-neutral-800"
-        >
-          <Plus size={15} /> Співробітник
-        </button>
-      </div>
+      {canEdit && (
+        <div className="flex items-center justify-end mb-4">
+          <button
+            onClick={() => {
+              setEditing(null);
+              setShowForm(true);
+            }}
+            className="flex items-center gap-1.5 text-sm font-medium bg-neutral-900 text-white px-3 py-2 rounded-md hover:bg-neutral-800"
+          >
+            <Plus size={15} /> Співробітник
+          </button>
+        </div>
+      )}
 
       {employees.length === 0 ? (
         <div className="text-sm text-neutral-400 py-16 text-center border border-dashed border-neutral-200 rounded-lg">
@@ -2167,47 +2190,56 @@ function EmployeesTab({ employees, setEmployees, projects, settings, setSettings
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {employees.map((em) => (
-            <button
-              key={em.id}
-              onClick={() => {
-                setEditing(em);
-                setShowForm(true);
-              }}
-              className="text-left bg-white border border-neutral-200 rounded-lg p-4 hover:border-neutral-300 hover:shadow-sm transition-all"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-neutral-800">{em.name}</span>
-                {em.role && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded border bg-neutral-50 text-neutral-600 border-neutral-200 shrink-0">
-                    {em.role}
-                  </span>
+          {employees.map((em) => {
+            const Tag = canEdit ? "button" : "div";
+            return (
+              <Tag
+                key={em.id}
+                onClick={
+                  canEdit
+                    ? () => {
+                        setEditing(em);
+                        setShowForm(true);
+                      }
+                    : undefined
+                }
+                className={`text-left bg-white border border-neutral-200 rounded-lg p-4 ${
+                  canEdit ? "hover:border-neutral-300 hover:shadow-sm transition-all" : ""
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-neutral-800">{em.name}</span>
+                  {em.role && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded border bg-neutral-50 text-neutral-600 border-neutral-200 shrink-0">
+                      {em.role}
+                    </span>
+                  )}
+                </div>
+                {em.phone && (
+                  <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1.5">
+                    <Phone size={12} /> {em.phone}
+                  </div>
                 )}
-              </div>
-              {em.phone && (
-                <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1.5">
-                  <Phone size={12} /> {em.phone}
+                {em.telegramChatId && (
+                  <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1">
+                    <Send size={12} /> Telegram підключено
+                  </div>
+                )}
+                {em.notes && (
+                  <div className="flex items-start gap-1.5 text-xs text-neutral-400 mt-1">
+                    <StickyNote size={12} className="mt-0.5 shrink-0" /> <span className="line-clamp-2">{em.notes}</span>
+                  </div>
+                )}
+                <div className="text-[11px] text-neutral-400 mt-2 pt-2 border-t border-neutral-100">
+                  Задіяний у проектах: {projectCount(em.id)}
                 </div>
-              )}
-              {em.telegramChatId && (
-                <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1">
-                  <Send size={12} /> Telegram підключено
-                </div>
-              )}
-              {em.notes && (
-                <div className="flex items-start gap-1.5 text-xs text-neutral-400 mt-1">
-                  <StickyNote size={12} className="mt-0.5 shrink-0" /> <span className="line-clamp-2">{em.notes}</span>
-                </div>
-              )}
-              <div className="text-[11px] text-neutral-400 mt-2 pt-2 border-t border-neutral-100">
-                Задіяний у проектах: {projectCount(em.id)}
-              </div>
-            </button>
-          ))}
+              </Tag>
+            );
+          })}
         </div>
       )}
 
-      {showForm && (
+      {showForm && canEdit && (
         <EmployeeForm
           employee={editing}
           onClose={() => setShowForm(false)}
