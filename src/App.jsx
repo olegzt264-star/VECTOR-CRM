@@ -1342,8 +1342,10 @@ function ProjectForm({
   onSave,
   onDelete,
 }) {
+  const isSelfServiceProject = !!(project && !project.clientId && project.responsibleId);
+  const simplified = selfService || isSelfServiceProject;
   const [name, setName] = useState(project?.name || "");
-  const [clientId, setClientId] = useState(project?.clientId || (selfService ? "" : clients[0]?.id || ""));
+  const [clientId, setClientId] = useState(project?.clientId || (simplified ? "" : clients[0]?.id || ""));
   const [location, setLocation] = useState(project?.location || "");
   const [warehouseTime, setWarehouseTime] = useState(project?.warehouseTime || "");
   const [arrivalTime, setArrivalTime] = useState(project?.arrivalTime || "");
@@ -1354,7 +1356,7 @@ function ProjectForm({
   const [price, setPrice] = useState(project?.price || "");
   const [notes, setNotes] = useState(project?.notes || "");
   const [items, setItems] = useState(project?.items || []);
-  const [responsibleId, setResponsibleId] = useState(project?.responsibleId || (selfService ? myEmployeeId || "" : ""));
+  const [responsibleId, setResponsibleId] = useState(project?.responsibleId || (simplified ? myEmployeeId || "" : ""));
   const [receivedById, setReceivedById] = useState(project?.receivedById || "");
   const [crew, setCrew] = useState(project?.crew || []);
   const [declinedBy, setDeclinedBy] = useState(project?.declinedBy || []);
@@ -1440,7 +1442,7 @@ function ProjectForm({
     return list;
   }, [items, startDate, endDate, equipment, projects, project]);
 
-  const canSave = name.trim() && (clientId || selfService) && startDate && endDate && startDate <= endDate;
+  const canSave = name.trim() && (clientId || simplified) && startDate && endDate && startDate <= endDate;
 
   const buildTelegramMessage = () => {
     const clientN = clients.find((c) => c.id === clientId)?.name || "—";
@@ -1452,7 +1454,7 @@ function ProjectForm({
         return eq ? `• ${eq.name} — ${it.qty} шт.` : null;
       })
       .filter(Boolean);
-    if (selfService) {
+    if (simplified) {
       const priceLine = Number(price) > 0 ? `Сума: ${fmtMoney(Number(price))}` : null;
       const lines = [
         `🔧 Самостійне бронювання обладнання`,
@@ -1482,7 +1484,7 @@ function ProjectForm({
 
   const sendTelegramNotifications = async () => {
     const chatIds = [];
-    if (selfService) {
+    if (simplified) {
       // Самостійні заявки технік бачить сам — йому й у спільну групу
       // повідомляти не треба, тільки адмінів.
       if (settings?.telegramAdminChatId) {
@@ -1607,7 +1609,7 @@ function ProjectForm({
             />
           </Field>
 
-          {!selfService && (
+          {!simplified && (
             <Field label="Клієнт">
               {clients.length === 0 ? (
                 <div className="text-xs text-neutral-400">Спочатку додайте клієнта у вкладці «Клієнти»</div>
@@ -1627,7 +1629,7 @@ function ProjectForm({
             </Field>
           )}
 
-          {!selfService && (
+          {!simplified && (
             <div className="grid grid-cols-2 gap-3">
               <Field label="Відповідальний">
                 <select
@@ -1712,8 +1714,8 @@ function ProjectForm({
             />
           </Field>
 
-          <div className={`grid gap-3 ${selfService ? "grid-cols-2" : "grid-cols-3"}`}>
-            {!selfService && (
+          <div className={`grid gap-3 ${simplified ? "grid-cols-2" : "grid-cols-3"}`}>
+            {!simplified && (
               <Field label="Час прибуття на склад">
                 <input
                   type="time"
@@ -1755,7 +1757,7 @@ function ProjectForm({
                 ))}
               </select>
             </Field>
-            {(canViewFinancials || selfService) && (
+            {(canViewFinancials || simplified) && (
               <Field label="Сума, грн">
                 <input
                   type="number"
@@ -1832,23 +1834,25 @@ function ProjectForm({
             </div>
           )}
 
+          {(canViewFinancials || simplified) && (
+            <Field label="Хто отримав гроші">
+              <select
+                value={receivedById}
+                onChange={(e) => setReceivedById(e.target.value)}
+                className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              >
+                <option value="">Не вказано</option>
+                {employees.map((em) => (
+                  <option key={em.id} value={em.id}>
+                    {em.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+
           {canViewFinancials && (
             <>
-              <Field label="Хто отримав гроші">
-                <select
-                  value={receivedById}
-                  onChange={(e) => setReceivedById(e.target.value)}
-                  className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                >
-                  <option value="">Не вказано</option>
-                  {employees.map((em) => (
-                    <option key={em.id} value={em.id}>
-                      {em.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
               <Field label="Оплати від клієнта">
                 <div className="flex flex-col gap-2">
                   {payments.map((p, idx) => (
