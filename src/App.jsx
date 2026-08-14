@@ -112,6 +112,7 @@ function CRMApp({ onLogout, profile }) {
   const canViewFinancials = isAdmin || !!profile?.canViewFinancials;
   const canEdit = isAdmin || !!profile?.canEdit;
   const canCreateOwn = canEdit || !!profile?.canCreate;
+  const selfService = canCreateOwn && !canEdit;
   const myEmployeeId = profile?.employeeId || null;
   const [tab, setTab] = useState("calendar");
   const [equipment, setEquipment] = useState(seedEquipment);
@@ -366,6 +367,7 @@ function CRMApp({ onLogout, profile }) {
             canEdit={canEdit}
             canCreateOwn={canCreateOwn}
             myEmployeeId={myEmployeeId}
+            selfService={selfService}
             setProjects={setProjects}
           />
         ) : tab === "projects" ? (
@@ -380,6 +382,7 @@ function CRMApp({ onLogout, profile }) {
             canEdit={canEdit}
             canCreateOwn={canCreateOwn}
             myEmployeeId={myEmployeeId}
+            selfService={selfService}
           />
         ) : tab === "finance" ? (
           <FinanceTab
@@ -393,6 +396,7 @@ function CRMApp({ onLogout, profile }) {
             canEdit={canEdit}
             canCreateOwn={canCreateOwn}
             myEmployeeId={myEmployeeId}
+            selfService={selfService}
           />
         ) : tab === "inventory" ? (
           <InventoryTab equipment={equipment} setEquipment={setEquipment} projects={projects} canEdit={canEdit} />
@@ -595,6 +599,7 @@ function CalendarTab({
   canEdit,
   canCreateOwn,
   myEmployeeId,
+  selfService,
   setProjects,
 }) {
   const [cursor, setCursor] = useState(() => new Date());
@@ -619,7 +624,16 @@ function CalendarTab({
   const projectsForDay = (iso) =>
     projects.filter((p) => p.status !== "cancelled" && overlaps(p.startDate, p.endDate, iso, iso));
 
-  const clientName = (id) => clients.find((c) => c.id === id)?.name || "—";
+  const clientName = (p) => {
+    const id = typeof p === "string" ? p : p?.clientId;
+    const found = clients.find((c) => c.id === id)?.name;
+    if (found) return found;
+    if (typeof p === "object" && p?.responsibleId) {
+      const empName = employees.find((e) => e.id === p.responsibleId)?.name;
+      if (empName) return empName + " (особисто)";
+    }
+    return "—";
+  };
 
   const todayISO = toISO(new Date());
   const selectedProjects = projectsForDay(selectedDate);
@@ -744,7 +758,7 @@ function CalendarTab({
                     ⚠ {(p.declinedBy || []).length} з бригади не може поїхати
                   </div>
                 )}
-                <div className="text-xs text-neutral-500 mt-0.5">{clientName(p.clientId)}</div>
+                <div className="text-xs text-neutral-500 mt-0.5">{clientName(p)}</div>
                 <div className="text-[11px] text-neutral-400 mt-1">
                   {fmtDate(p.startDate)} — {fmtDate(p.endDate)}
                 </div>
@@ -783,6 +797,7 @@ function CalendarTab({
           onClose={() => setShowForm(false)}
           readOnly={!(canEdit || (canCreateOwn && (!editing || editing.responsibleId === myEmployeeId)))}
           myEmployeeId={myEmployeeId}
+          selfService={selfService}
           onSave={(p) => {
             setProjects((prev) => {
               const exists = prev.some((x) => x.id === p.id);
@@ -817,13 +832,23 @@ function ProjectsTab({
   canEdit,
   canCreateOwn,
   myEmployeeId,
+  selfService,
 }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const clientName = (id) => clients.find((c) => c.id === id)?.name || "—";
+  const clientName = (p) => {
+    const id = typeof p === "string" ? p : p?.clientId;
+    const found = clients.find((c) => c.id === id)?.name;
+    if (found) return found;
+    if (typeof p === "object" && p?.responsibleId) {
+      const empName = employees.find((e) => e.id === p.responsibleId)?.name;
+      if (empName) return empName + " (особисто)";
+    }
+    return "—";
+  };
 
   const sorted = useMemo(() => {
     const today = new Date(toISO(new Date()));
@@ -832,7 +857,7 @@ function ProjectsTab({
       .filter((p) => {
         if (!query.trim()) return true;
         const q = query.toLowerCase();
-        return p.name.toLowerCase().includes(q) || clientName(p.clientId).toLowerCase().includes(q);
+        return p.name.toLowerCase().includes(q) || clientName(p).toLowerCase().includes(q);
       })
       .sort((a, b) => {
         const aDone = a.status === "done" ? 1 : 0;
@@ -904,7 +929,7 @@ function ProjectsTab({
                   </span>
                 </div>
                 <div className="text-xs text-neutral-500 mt-1">
-                  {clientName(p.clientId)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)} · {p.items.length} позицій
+                  {clientName(p)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)} · {p.items.length} позицій
                 </div>
                 {(p.declinedBy || []).length > 0 && (
                   <div className="text-[11px] text-rose-500 font-medium mt-0.5">
@@ -936,6 +961,7 @@ function ProjectsTab({
           canViewFinancials={canViewFinancials}
           readOnly={!(canEdit || (canCreateOwn && (!editing || editing.responsibleId === myEmployeeId)))}
           myEmployeeId={myEmployeeId}
+          selfService={selfService}
           onClose={() => setShowForm(false)}
           onSave={(p) => {
             setProjects((prev) => {
@@ -971,6 +997,7 @@ function FinanceTab({
   canEdit,
   canCreateOwn,
   myEmployeeId,
+  selfService,
 }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -982,7 +1009,16 @@ function FinanceTab({
   const [methodFilter, setMethodFilter] = useState("all");
   const [sortBy, setSortBy] = useState("date");
 
-  const clientName = (id) => clients.find((c) => c.id === id)?.name || "—";
+  const clientName = (p) => {
+    const id = typeof p === "string" ? p : p?.clientId;
+    const found = clients.find((c) => c.id === id)?.name;
+    if (found) return found;
+    if (typeof p === "object" && p?.responsibleId) {
+      const empName = employees.find((e) => e.id === p.responsibleId)?.name;
+      if (empName) return empName + " (особисто)";
+    }
+    return "—";
+  };
   const employeeName = (id) => employees.find((e) => e.id === id)?.name || "";
 
   const paymentStatus = (p) => {
@@ -1241,7 +1277,7 @@ function FinanceTab({
                     </span>
                   </div>
                   <div className="text-xs text-neutral-500 mt-1">
-                    {clientName(p.clientId)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)}
+                    {clientName(p)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)}
                     {p.responsibleId ? ` · Відп.: ${employeeName(p.responsibleId) || "—"}` : ""}
                   </div>
                 </div>
@@ -1269,6 +1305,7 @@ function FinanceTab({
           canViewFinancials={canViewFinancials}
           readOnly={!(canEdit || (canCreateOwn && (!editing || editing.responsibleId === myEmployeeId)))}
           myEmployeeId={myEmployeeId}
+          selfService={selfService}
           onClose={() => setShowForm(false)}
           onSave={(p) => {
             setProjects((prev) => {
@@ -1300,12 +1337,13 @@ function ProjectForm({
   canViewFinancials,
   readOnly,
   myEmployeeId,
+  selfService,
   onClose,
   onSave,
   onDelete,
 }) {
   const [name, setName] = useState(project?.name || "");
-  const [clientId, setClientId] = useState(project?.clientId || clients[0]?.id || "");
+  const [clientId, setClientId] = useState(project?.clientId || (selfService ? "" : clients[0]?.id || ""));
   const [location, setLocation] = useState(project?.location || "");
   const [warehouseTime, setWarehouseTime] = useState(project?.warehouseTime || "");
   const [arrivalTime, setArrivalTime] = useState(project?.arrivalTime || "");
@@ -1316,7 +1354,7 @@ function ProjectForm({
   const [price, setPrice] = useState(project?.price || "");
   const [notes, setNotes] = useState(project?.notes || "");
   const [items, setItems] = useState(project?.items || []);
-  const [responsibleId, setResponsibleId] = useState(project?.responsibleId || "");
+  const [responsibleId, setResponsibleId] = useState(project?.responsibleId || (selfService ? myEmployeeId || "" : ""));
   const [crew, setCrew] = useState(project?.crew || []);
   const [declinedBy, setDeclinedBy] = useState(project?.declinedBy || []);
   const [payments, setPayments] = useState(project?.payments || []);
@@ -1366,7 +1404,7 @@ function ProjectForm({
     return list;
   }, [items, startDate, endDate, equipment, projects, project]);
 
-  const canSave = name.trim() && clientId && startDate && endDate && startDate <= endDate;
+  const canSave = name.trim() && (clientId || selfService) && startDate && endDate && startDate <= endDate;
 
   const buildTelegramMessage = () => {
     const clientN = clients.find((c) => c.id === clientId)?.name || "—";
@@ -1378,6 +1416,18 @@ function ProjectForm({
         return eq ? `• ${eq.name} — ${it.qty} шт.` : null;
       })
       .filter(Boolean);
+    if (selfService) {
+      const priceLine = Number(price) > 0 ? `Сума: ${fmtMoney(Number(price))}` : null;
+      const lines = [
+        `🔧 Самостійне бронювання обладнання`,
+        `Хто бере: ${responsibleName || "—"}`,
+        `Дати: ${fmtDate(startDate)} — ${fmtDate(endDate)}`,
+        priceLine,
+        itemLines.length ? `\nОбладнання:\n${itemLines.join("\n")}` : null,
+        notes ? `\nПримітки: ${notes}` : null,
+      ].filter(Boolean);
+      return lines.join("\n");
+    }
     const lines = [
       `🎪 Новий проект: ${name.trim()}`,
       `Клієнт: ${clientN}`,
@@ -1401,6 +1451,13 @@ function ProjectForm({
       if (emp?.telegramChatId) chatIds.push(emp.telegramChatId.trim());
     }
     if (settings?.telegramGroupChatId) chatIds.push(settings.telegramGroupChatId.trim());
+    if (selfService && settings?.telegramAdminChatId) {
+      settings.telegramAdminChatId
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .forEach((id) => chatIds.push(id));
+    }
     const uniqueChatIds = [...new Set(chatIds.filter(Boolean))];
     if (uniqueChatIds.length === 0) {
       setNotifyState("error");
@@ -1507,57 +1564,61 @@ function ProjectForm({
             />
           </Field>
 
-          <Field label="Клієнт">
-            {clients.length === 0 ? (
-              <div className="text-xs text-neutral-400">Спочатку додайте клієнта у вкладці «Клієнти»</div>
-            ) : (
-              <select
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-              >
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Відповідальний">
-              <select
-                value={responsibleId}
-                onChange={(e) => setResponsibleId(e.target.value)}
-                className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-              >
-                <option value="">Не призначено</option>
-                {employees.map((em) => (
-                  <option key={em.id} value={em.id}>
-                    {em.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Бригада">
-              {employees.length === 0 ? (
-                <div className="text-xs text-neutral-400 pt-2">Немає співробітників</div>
+          {!selfService && (
+            <Field label="Клієнт">
+              {clients.length === 0 ? (
+                <div className="text-xs text-neutral-400">Спочатку додайте клієнта у вкладці «Клієнти»</div>
               ) : (
-                <div className="border border-neutral-300 rounded-md px-2.5 py-1.5 max-h-24 overflow-y-auto flex flex-col gap-1">
-                  {employees.map((em) => (
-                    <label key={em.id} className="flex items-center gap-2 text-sm text-neutral-700">
-                      <input type="checkbox" checked={crew.includes(em.id)} onChange={() => toggleCrew(em.id)} />
-                      {em.name}
-                      {declinedBy.includes(em.id) && (
-                        <span className="text-[10px] text-rose-500 font-medium">не може поїхати</span>
-                      )}
-                    </label>
+                <select
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                >
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
                   ))}
-                </div>
+                </select>
               )}
             </Field>
-          </div>
+          )}
+
+          {!selfService && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Відповідальний">
+                <select
+                  value={responsibleId}
+                  onChange={(e) => setResponsibleId(e.target.value)}
+                  className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                >
+                  <option value="">Не призначено</option>
+                  {employees.map((em) => (
+                    <option key={em.id} value={em.id}>
+                      {em.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Бригада">
+                {employees.length === 0 ? (
+                  <div className="text-xs text-neutral-400 pt-2">Немає співробітників</div>
+                ) : (
+                  <div className="border border-neutral-300 rounded-md px-2.5 py-1.5 max-h-24 overflow-y-auto flex flex-col gap-1">
+                    {employees.map((em) => (
+                      <label key={em.id} className="flex items-center gap-2 text-sm text-neutral-700">
+                        <input type="checkbox" checked={crew.includes(em.id)} onChange={() => toggleCrew(em.id)} />
+                        {em.name}
+                        {declinedBy.includes(em.id) && (
+                          <span className="text-[10px] text-rose-500 font-medium">не може поїхати</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </Field>
+            </div>
+          )}
 
           <div className="flex items-center gap-3">
             <button
@@ -1608,15 +1669,17 @@ function ProjectForm({
             />
           </Field>
 
-          <div className="grid grid-cols-3 gap-3">
-            <Field label="Час прибуття на склад">
-              <input
-                type="time"
-                value={warehouseTime}
-                onChange={(e) => setWarehouseTime(e.target.value)}
-                className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-              />
-            </Field>
+          <div className={`grid gap-3 ${selfService ? "grid-cols-2" : "grid-cols-3"}`}>
+            {!selfService && (
+              <Field label="Час прибуття на склад">
+                <input
+                  type="time"
+                  value={warehouseTime}
+                  onChange={(e) => setWarehouseTime(e.target.value)}
+                  className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </Field>
+            )}
             <Field label="Час прибуття на майданчик">
               <input
                 type="time"
@@ -1649,7 +1712,7 @@ function ProjectForm({
                 ))}
               </select>
             </Field>
-            {canViewFinancials && (
+            {(canViewFinancials || selfService) && (
               <Field label="Сума, грн">
                 <input
                   type="number"
@@ -2248,6 +2311,7 @@ function EmployeesTab({ employees, setEmployees, projects, settings, setSettings
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [groupIdDraft, setGroupIdDraft] = useState(settings?.telegramGroupChatId || "");
+  const [adminIdDraft, setAdminIdDraft] = useState(settings?.telegramAdminChatId || "");
 
   const projectCount = (empId) =>
     projects.filter((p) => p.responsibleId === empId || (p.crew || []).includes(empId)).length;
@@ -2273,6 +2337,28 @@ function EmployeesTab({ employees, setEmployees, projects, settings, setSettings
           {canEdit && (
             <button
               onClick={() => setSettings((prev) => ({ ...prev, telegramGroupChatId: groupIdDraft.trim() }))}
+              className="text-sm font-medium px-3 py-2 rounded-md bg-neutral-900 text-white hover:bg-neutral-800"
+            >
+              Зберегти
+            </button>
+          )}
+        </div>
+
+        <div className="text-xs text-neutral-500 mt-4 mb-2">
+          Chat ID адміністратора(ів) — сюди приходить окреме сповіщення щоразу, коли технік із самостійним
+          доступом бере обладнання (можна декілька через кому).
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            value={adminIdDraft}
+            onChange={(e) => setAdminIdDraft(e.target.value)}
+            disabled={!canEdit}
+            placeholder="Наприклад: 123456789, 987654321"
+            className="flex-1 border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
+          />
+          {canEdit && (
+            <button
+              onClick={() => setSettings((prev) => ({ ...prev, telegramAdminChatId: adminIdDraft.trim() }))}
               className="text-sm font-medium px-3 py-2 rounded-md bg-neutral-900 text-white hover:bg-neutral-800"
             >
               Зберегти
