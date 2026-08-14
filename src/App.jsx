@@ -111,6 +111,8 @@ function CRMApp({ onLogout, profile }) {
   const allowedTabIds = profile?.allowedTabs || [];
   const canViewFinancials = isAdmin || !!profile?.canViewFinancials;
   const canEdit = isAdmin || !!profile?.canEdit;
+  const canCreateOwn = canEdit || !!profile?.canCreate;
+  const myEmployeeId = profile?.employeeId || null;
   const [tab, setTab] = useState("calendar");
   const [equipment, setEquipment] = useState(seedEquipment);
   const [clients, setClients] = useState(seedClients);
@@ -362,6 +364,8 @@ function CRMApp({ onLogout, profile }) {
             settings={settings}
             canViewFinancials={canViewFinancials}
             canEdit={canEdit}
+            canCreateOwn={canCreateOwn}
+            myEmployeeId={myEmployeeId}
             setProjects={setProjects}
           />
         ) : tab === "projects" ? (
@@ -374,6 +378,8 @@ function CRMApp({ onLogout, profile }) {
             settings={settings}
             canViewFinancials={canViewFinancials}
             canEdit={canEdit}
+            canCreateOwn={canCreateOwn}
+            myEmployeeId={myEmployeeId}
           />
         ) : tab === "finance" ? (
           <FinanceTab
@@ -385,6 +391,8 @@ function CRMApp({ onLogout, profile }) {
             settings={settings}
             canViewFinancials={canViewFinancials}
             canEdit={canEdit}
+            canCreateOwn={canCreateOwn}
+            myEmployeeId={myEmployeeId}
           />
         ) : tab === "inventory" ? (
           <InventoryTab equipment={equipment} setEquipment={setEquipment} projects={projects} canEdit={canEdit} />
@@ -436,6 +444,8 @@ export default function App() {
             allowedTabs: data.allowed_tabs || [],
             canViewFinancials: !!data.can_view_financials,
             canEdit: !!data.is_admin || !!data.can_edit,
+            canCreate: !!data.can_create,
+            employeeId: data.employee_id || null,
           });
         } else {
           // Немає рядка ролі — з міркувань безпеки за замовчуванням
@@ -447,6 +457,8 @@ export default function App() {
             allowedTabs: ["calendar", "inventory"],
             canViewFinancials: false,
             canEdit: false,
+            canCreate: false,
+            employeeId: null,
           });
         }
       });
@@ -573,7 +585,18 @@ function computeUsage(projects, equipmentId, start, end, excludeProjectId) {
 
 // ---------- Calendar Tab ----------
 
-function CalendarTab({ projects, clients, equipment, employees, settings, canViewFinancials, canEdit, setProjects }) {
+function CalendarTab({
+  projects,
+  clients,
+  equipment,
+  employees,
+  settings,
+  canViewFinancials,
+  canEdit,
+  canCreateOwn,
+  myEmployeeId,
+  setProjects,
+}) {
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => toISO(new Date()));
   const [showForm, setShowForm] = useState(false);
@@ -685,7 +708,7 @@ function CalendarTab({ projects, clients, equipment, employees, settings, canVie
       <div className="bg-white border border-neutral-200 rounded-lg p-4 h-fit">
         <div className="flex items-center justify-between mb-3">
           <div className="font-semibold text-sm text-neutral-800">{fmtDate(selectedDate)}</div>
-          {canEdit && (
+          {(canEdit || canCreateOwn) && (
             <button
               onClick={() => {
                 setEditing(null);
@@ -716,6 +739,11 @@ function CalendarTab({ projects, clients, equipment, employees, settings, canVie
                     {STATUS[p.status].label}
                   </span>
                 </div>
+                {(p.declinedBy || []).length > 0 && (
+                  <div className="text-[11px] text-rose-500 font-medium mt-0.5">
+                    ⚠ {(p.declinedBy || []).length} з бригади не може поїхати
+                  </div>
+                )}
                 <div className="text-xs text-neutral-500 mt-0.5">{clientName(p.clientId)}</div>
                 <div className="text-[11px] text-neutral-400 mt-1">
                   {fmtDate(p.startDate)} — {fmtDate(p.endDate)}
@@ -753,7 +781,8 @@ function CalendarTab({ projects, clients, equipment, employees, settings, canVie
           settings={settings}
           canViewFinancials={canViewFinancials}
           onClose={() => setShowForm(false)}
-          readOnly={!canEdit}
+          readOnly={!(canEdit || (canCreateOwn && (!editing || editing.responsibleId === myEmployeeId)))}
+          myEmployeeId={myEmployeeId}
           onSave={(p) => {
             setProjects((prev) => {
               const exists = prev.some((x) => x.id === p.id);
@@ -777,7 +806,18 @@ function CalendarTab({ projects, clients, equipment, employees, settings, canVie
 
 // ---------- Projects Tab ----------
 
-function ProjectsTab({ projects, setProjects, clients, equipment, employees, settings, canViewFinancials, canEdit }) {
+function ProjectsTab({
+  projects,
+  setProjects,
+  clients,
+  equipment,
+  employees,
+  settings,
+  canViewFinancials,
+  canEdit,
+  canCreateOwn,
+  myEmployeeId,
+}) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [query, setQuery] = useState("");
@@ -828,7 +868,7 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees, set
             ))}
           </select>
         </div>
-        {canEdit && (
+        {(canEdit || canCreateOwn) && (
           <button
             onClick={() => {
               setEditing(null);
@@ -866,6 +906,11 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees, set
                 <div className="text-xs text-neutral-500 mt-1">
                   {clientName(p.clientId)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)} · {p.items.length} позицій
                 </div>
+                {(p.declinedBy || []).length > 0 && (
+                  <div className="text-[11px] text-rose-500 font-medium mt-0.5">
+                    ⚠ {(p.declinedBy || []).length} з бригади не може поїхати
+                  </div>
+                )}
               </div>
               {canViewFinancials && (
                 <div className="text-right shrink-0">
@@ -889,7 +934,8 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees, set
           projects={projects}
           settings={settings}
           canViewFinancials={canViewFinancials}
-          readOnly={!canEdit}
+          readOnly={!(canEdit || (canCreateOwn && (!editing || editing.responsibleId === myEmployeeId)))}
+          myEmployeeId={myEmployeeId}
           onClose={() => setShowForm(false)}
           onSave={(p) => {
             setProjects((prev) => {
@@ -914,7 +960,18 @@ function ProjectsTab({ projects, setProjects, clients, equipment, employees, set
 
 // ---------- Finance Tab ----------
 
-function FinanceTab({ projects, setProjects, clients, equipment, employees, settings, canViewFinancials, canEdit }) {
+function FinanceTab({
+  projects,
+  setProjects,
+  clients,
+  equipment,
+  employees,
+  settings,
+  canViewFinancials,
+  canEdit,
+  canCreateOwn,
+  myEmployeeId,
+}) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [periodFrom, setPeriodFrom] = useState("");
@@ -1210,7 +1267,8 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees, sett
           projects={projects}
           settings={settings}
           canViewFinancials={canViewFinancials}
-          readOnly={!canEdit}
+          readOnly={!(canEdit || (canCreateOwn && (!editing || editing.responsibleId === myEmployeeId)))}
+          myEmployeeId={myEmployeeId}
           onClose={() => setShowForm(false)}
           onSave={(p) => {
             setProjects((prev) => {
@@ -1231,7 +1289,21 @@ function FinanceTab({ projects, setProjects, clients, equipment, employees, sett
 
 // ---------- Project Form (modal) ----------
 
-function ProjectForm({ project, defaultDate, clients, equipment, employees, projects, settings, canViewFinancials, readOnly, onClose, onSave, onDelete }) {
+function ProjectForm({
+  project,
+  defaultDate,
+  clients,
+  equipment,
+  employees,
+  projects,
+  settings,
+  canViewFinancials,
+  readOnly,
+  myEmployeeId,
+  onClose,
+  onSave,
+  onDelete,
+}) {
   const [name, setName] = useState(project?.name || "");
   const [clientId, setClientId] = useState(project?.clientId || clients[0]?.id || "");
   const [location, setLocation] = useState(project?.location || "");
@@ -1246,6 +1318,7 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
   const [items, setItems] = useState(project?.items || []);
   const [responsibleId, setResponsibleId] = useState(project?.responsibleId || "");
   const [crew, setCrew] = useState(project?.crew || []);
+  const [declinedBy, setDeclinedBy] = useState(project?.declinedBy || []);
   const [payments, setPayments] = useState(project?.payments || []);
   const [expenses, setExpenses] = useState(project?.expenses || []);
   const [notifyState, setNotifyState] = useState("idle"); // idle | sending | sent | error
@@ -1366,6 +1439,7 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
       items,
       responsibleId,
       crew,
+      declinedBy,
       payments: payments.map((p) => ({ ...p, amount: Number(p.amount) || 0 })),
       expenses: expenses.map((e) => ({ ...e, amount: Number(e.amount) || 0 })),
     };
@@ -1374,6 +1448,19 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
     if (isNew && !isPastOrClosed && (responsibleId || crew.length > 0)) {
       sendTelegramNotifications();
     }
+  };
+
+  // Особиста відмітка "не можу поїхати" — доступна навіть у режимі
+  // "лише перегляд", бо це не редагування проекту як такого, а
+  // особиста відповідь конкретного співробітника. Зберігає одразу,
+  // без кнопки "Зберегти".
+  const iAmInvolved = !!project && !!myEmployeeId && (responsibleId === myEmployeeId || crew.includes(myEmployeeId));
+  const iDeclined = !!myEmployeeId && declinedBy.includes(myEmployeeId);
+  const toggleMyDecline = () => {
+    if (!project || !myEmployeeId) return;
+    const nextDeclined = iDeclined ? declinedBy.filter((id) => id !== myEmployeeId) : [...declinedBy, myEmployeeId];
+    setDeclinedBy(nextDeclined);
+    onSave({ ...project, declinedBy: nextDeclined });
   };
 
   return (
@@ -1388,6 +1475,27 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
             <X size={18} />
           </button>
         </div>
+
+        {iAmInvolved && (
+          <div
+            className={`flex items-center justify-between gap-3 px-5 py-2.5 border-b text-xs ${
+              iDeclined ? "bg-rose-50 border-rose-100 text-rose-700" : "bg-neutral-50 border-neutral-100 text-neutral-600"
+            }`}
+          >
+            <span>{iDeclined ? "Ви позначили, що не можете поїхати на цю роботу" : "Вас призначено на цю роботу"}</span>
+            <button
+              type="button"
+              onClick={toggleMyDecline}
+              className={`shrink-0 text-xs font-medium px-2.5 py-1 rounded-md border ${
+                iDeclined
+                  ? "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                  : "border-rose-300 text-rose-600 hover:bg-rose-50"
+              }`}
+            >
+              {iDeclined ? "Я все ж їду" : "Не можу поїхати"}
+            </button>
+          </div>
+        )}
 
         <fieldset disabled={readOnly} className="p-5 flex flex-col gap-3.5 border-0 m-0 min-w-0 disabled:opacity-70">
           <Field label="Назва проекту">
@@ -1441,6 +1549,9 @@ function ProjectForm({ project, defaultDate, clients, equipment, employees, proj
                     <label key={em.id} className="flex items-center gap-2 text-sm text-neutral-700">
                       <input type="checkbox" checked={crew.includes(em.id)} onChange={() => toggleCrew(em.id)} />
                       {em.name}
+                      {declinedBy.includes(em.id) && (
+                        <span className="text-[10px] text-rose-500 font-medium">не може поїхати</span>
+                      )}
                     </label>
                   ))}
                 </div>
@@ -2283,6 +2394,12 @@ function EmployeeForm({ employee, onClose, onSave, onDelete }) {
           </button>
         </div>
         <div className="p-5 flex flex-col gap-3.5">
+          {employee && (
+            <div className="bg-neutral-50 border border-neutral-200 rounded-md px-3 py-2 text-xs text-neutral-500">
+              ID для звʼязку з логіном (для вкладки user_roles у Supabase):{" "}
+              <span className="font-mono text-neutral-700">{employee.id}</span>
+            </div>
+          )}
           <Field label="Ім'я">
             <input
               value={name}
