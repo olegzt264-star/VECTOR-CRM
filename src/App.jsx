@@ -1473,7 +1473,9 @@ function ProjectForm({
     return list;
   }, [items, startDate, endDate, equipment, projects, project]);
 
-  const canSave = name.trim() && (clientId || simplified) && startDate && endDate && startDate <= endDate;
+  const canSave = simplified
+    ? items.length > 0 && startDate && endDate && startDate <= endDate
+    : name.trim() && clientId && startDate && endDate && startDate <= endDate;
 
   const buildTelegramMessage = () => {
     const clientN = clients.find((c) => c.id === clientId)?.name || "—";
@@ -1554,9 +1556,13 @@ function ProjectForm({
   const handleSave = () => {
     if (!canSave) return;
     const isNew = !project;
+    const autoName =
+      simplified && !name.trim()
+        ? `Взяв обладнання: ${employees.find((e) => e.id === responsibleId)?.name || "—"} (${fmtDate(startDate)})`
+        : name.trim();
     const savedProject = {
       id: project?.id || uid("pr"),
-      name: name.trim(),
+      name: autoName,
       clientId,
       location: location.trim(),
       warehouseTime,
@@ -1631,14 +1637,16 @@ function ProjectForm({
         )}
 
         <fieldset disabled={readOnly} className="p-5 flex flex-col gap-3.5 border-0 m-0 min-w-0 disabled:opacity-70">
-          <Field label="Назва проекту">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Наприклад: Весілля Олени та Ігоря"
-              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-            />
-          </Field>
+          {!simplified && (
+            <Field label="Назва проекту">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Наприклад: Весілля Олени та Ігоря"
+                className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </Field>
+          )}
 
           {!simplified && (
             <Field label="Клієнт">
@@ -1856,6 +1864,10 @@ function ProjectForm({
               </button>
             </div>
           </Field>
+
+          {simplified && items.length === 0 && (
+            <div className="text-xs text-rose-500 -mt-2">Оберіть хоча б одну позицію обладнання, щоб зберегти</div>
+          )}
 
           {conflicts.length > 0 && (
             <div className="bg-rose-50 border border-rose-200 rounded-md p-3 flex flex-col gap-1.5">
