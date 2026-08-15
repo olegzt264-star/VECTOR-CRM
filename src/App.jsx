@@ -304,7 +304,7 @@ function CRMApp({ onLogout, profile }) {
     <div className="w-full h-full min-h-[700px] bg-neutral-50 text-neutral-900 flex flex-col">
       {/* header */}
       <div className="bg-neutral-950 text-neutral-100">
-        <div className="max-w-6xl mx-auto px-5 h-16 sm:h-20 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-5 h-24 sm:h-32 flex items-center justify-between">
           <div className="flex items-center gap-2.5 h-full py-2">
             <img src="/logo.png" alt="Vector Event Solutions" className="h-full w-auto object-contain" />
           </div>
@@ -519,7 +519,7 @@ function LoginScreen() {
   return (
     <div className="w-full h-full min-h-[700px] bg-neutral-50 flex items-center justify-center px-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white border border-neutral-200 rounded-lg p-6">
-        <div className="flex items-center justify-center mb-6 bg-neutral-950 rounded-lg h-24">
+        <div className="flex items-center justify-center mb-6 bg-neutral-950 rounded-lg h-32">
           <img src="/logo.png" alt="Vector Event Solutions" className="h-full w-auto object-contain" />
         </div>
 
@@ -741,9 +741,9 @@ function CalendarTab({
                     {STATUS[p.status].label}
                   </span>
                 </div>
-                {(p.declinedBy || []).length > 0 && (
+                {Object.values(p.responses || {}).filter((v) => v === "no").length > 0 && (
                   <div className="text-[11px] text-rose-500 font-medium mt-0.5">
-                    ⚠ {(p.declinedBy || []).length} з бригади не може поїхати
+                    ⚠ {Object.values(p.responses || {}).filter((v) => v === "no").length} з бригади не може поїхати
                   </div>
                 )}
                 <div className="text-xs text-neutral-500 mt-0.5">{clientName(p)}</div>
@@ -919,9 +919,9 @@ function ProjectsTab({
                 <div className="text-xs text-neutral-500 mt-1">
                   {clientName(p)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)} · {p.items.length} позицій
                 </div>
-                {(p.declinedBy || []).length > 0 && (
+                {Object.values(p.responses || {}).filter((v) => v === "no").length > 0 && (
                   <div className="text-[11px] text-rose-500 font-medium mt-0.5">
-                    ⚠ {(p.declinedBy || []).length} з бригади не може поїхати
+                    ⚠ {Object.values(p.responses || {}).filter((v) => v === "no").length} з бригади не може поїхати
                   </div>
                 )}
               </div>
@@ -1375,7 +1375,7 @@ function ProjectForm({
   const [responsibleId, setResponsibleId] = useState(project?.responsibleId || (simplified ? myEmployeeId || "" : ""));
   const [receivedById, setReceivedById] = useState(project?.receivedById || "");
   const [crew, setCrew] = useState(project?.crew || []);
-  const [declinedBy, setDeclinedBy] = useState(project?.declinedBy || []);
+  const [responses, setResponses] = useState(project?.responses || {});
   const [documents, setDocuments] = useState(project?.documents || []);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [docError, setDocError] = useState("");
@@ -1499,6 +1499,9 @@ function ProjectForm({
       crewNames.length ? `Бригада: ${crewNames.join(", ")}` : null,
       itemLines.length ? `\nОбладнання:\n${itemLines.join("\n")}` : null,
       notes ? `\nПримітки: ${notes}` : null,
+      responsibleName || crewNames.length
+        ? `\n🙏 Будь ласка, підтвердіть у CRM, чи зможете поїхати на цю роботу.`
+        : null,
     ].filter(Boolean);
     return lines.join("\n");
   };
@@ -1565,7 +1568,7 @@ function ProjectForm({
       responsibleId,
       receivedById,
       crew,
-      declinedBy,
+      responses,
       documents,
       payments: payments.map((p) => ({ ...p, amount: Number(p.amount) || 0 })),
       expenses: expenses.map((e) => ({ ...e, amount: Number(e.amount) || 0 })),
@@ -1576,17 +1579,33 @@ function ProjectForm({
     }
   };
 
-  // Особиста відмітка "не можу поїхати" — доступна навіть у режимі
-  // "лише перегляд", бо це не редагування проекту як такого, а
-  // особиста відповідь конкретного співробітника. Зберігає одразу,
-  // без кнопки "Зберегти".
+  // Особиста відповідь "можу / не можу поїхати" — доступна навіть у
+  // режимі "лише перегляд", бо це не редагування проекту, а особиста
+  // відповідь конкретного співробітника. Зберігає одразу, без кнопки
+  // "Зберегти", і одразу сповіщає адмінів.
   const iAmInvolved = !!project && !!myEmployeeId && (responsibleId === myEmployeeId || crew.includes(myEmployeeId));
-  const iDeclined = !!myEmployeeId && declinedBy.includes(myEmployeeId);
-  const toggleMyDecline = () => {
+  const myResponse = myEmployeeId ? responses[myEmployeeId] : null;
+  const setMyResponse = async (value) => {
     if (!project || !myEmployeeId) return;
-    const nextDeclined = iDeclined ? declinedBy.filter((id) => id !== myEmployeeId) : [...declinedBy, myEmployeeId];
-    setDeclinedBy(nextDeclined);
-    onSave({ ...project, declinedBy: nextDeclined });
+    const nextResponses = { ...responses, [myEmployeeId]: value };
+    setResponses(nextResponses);
+    onSave({ ...project, responses: nextResponses });
+
+    const adminIds = (settings?.telegramAdminChatId || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (adminIds.length === 0) return;
+    const myName = employees.find((e) => e.id === myEmployeeId)?.name || "Співробітник";
+    const text =
+      value === "no"
+        ? `❌ ${myName} НЕ може поїхати на роботу «${project.name}» (${fmtDate(project.startDate)})`
+        : `✅ ${myName} підтвердив(ла) участь у роботі «${project.name}» (${fmtDate(project.startDate)})`;
+    fetch("/api/send-telegram", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatIds: adminIds, message: text }),
+    }).catch(() => {});
   };
 
   return (
@@ -1605,21 +1624,44 @@ function ProjectForm({
         {iAmInvolved && (
           <div
             className={`flex items-center justify-between gap-3 px-5 py-2.5 border-b text-xs ${
-              iDeclined ? "bg-rose-50 border-rose-100 text-rose-700" : "bg-neutral-50 border-neutral-100 text-neutral-600"
+              myResponse === "no"
+                ? "bg-rose-50 border-rose-100 text-rose-700"
+                : myResponse === "yes"
+                ? "bg-emerald-50 border-emerald-100 text-emerald-700"
+                : "bg-neutral-50 border-neutral-100 text-neutral-600"
             }`}
           >
-            <span>{iDeclined ? "Ви позначили, що не можете поїхати на цю роботу" : "Вас призначено на цю роботу"}</span>
-            <button
-              type="button"
-              onClick={toggleMyDecline}
-              className={`shrink-0 text-xs font-medium px-2.5 py-1 rounded-md border ${
-                iDeclined
-                  ? "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                  : "border-rose-300 text-rose-600 hover:bg-rose-50"
-              }`}
-            >
-              {iDeclined ? "Я все ж їду" : "Не можу поїхати"}
-            </button>
+            <span>
+              {myResponse === "no"
+                ? "Ви позначили, що не можете поїхати"
+                : myResponse === "yes"
+                ? "Ви підтвердили участь"
+                : "Вас призначено на цю роботу — підтвердіть, будь ласка"}
+            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setMyResponse("yes")}
+                className={`text-xs font-medium px-2.5 py-1 rounded-md border ${
+                  myResponse === "yes"
+                    ? "bg-emerald-600 text-white border-emerald-600"
+                    : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                }`}
+              >
+                Можу їхати
+              </button>
+              <button
+                type="button"
+                onClick={() => setMyResponse("no")}
+                className={`text-xs font-medium px-2.5 py-1 rounded-md border ${
+                  myResponse === "no"
+                    ? "bg-rose-600 text-white border-rose-600"
+                    : "border-rose-300 text-rose-600 hover:bg-rose-50"
+                }`}
+              >
+                Не можу їхати
+              </button>
+            </div>
           </div>
         )}
 
@@ -1686,8 +1728,11 @@ function ProjectForm({
                       <label key={em.id} className="flex items-center gap-2 text-sm text-neutral-700">
                         <input type="checkbox" checked={crew.includes(em.id)} onChange={() => toggleCrew(em.id)} />
                         {em.name}
-                        {declinedBy.includes(em.id) && (
+                        {responses[em.id] === "no" && (
                           <span className="text-[10px] text-rose-500 font-medium">не може поїхати</span>
+                        )}
+                        {responses[em.id] === "yes" && (
+                          <span className="text-[10px] text-emerald-600 font-medium">підтвердив(ла)</span>
                         )}
                       </label>
                     ))}
