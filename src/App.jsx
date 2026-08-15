@@ -304,9 +304,9 @@ function CRMApp({ onLogout, profile }) {
     <div className="w-full h-full min-h-[700px] bg-neutral-50 text-neutral-900 flex flex-col">
       {/* header */}
       <div className="bg-neutral-950 text-neutral-100">
-        <div className="max-w-6xl mx-auto px-5 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Vector Event Solutions" className="h-36 w-auto" />
+        <div className="max-w-6xl mx-auto px-5 h-16 sm:h-20 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 h-full py-2">
+            <img src="/logo.png" alt="Vector Event Solutions" className="h-full w-auto object-contain" />
           </div>
           <div className="flex items-center gap-3">
             <div className="text-[11px] text-neutral-500">
@@ -519,8 +519,8 @@ function LoginScreen() {
   return (
     <div className="w-full h-full min-h-[700px] bg-neutral-50 flex items-center justify-center px-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white border border-neutral-200 rounded-lg p-6">
-        <div className="flex items-center justify-center mb-6 bg-neutral-950 rounded-lg py-4">
-          <img src="/logo.png" alt="Vector Event Solutions" className="h-36 w-auto" />
+        <div className="flex items-center justify-center mb-6 bg-neutral-950 rounded-lg h-24">
+          <img src="/logo.png" alt="Vector Event Solutions" className="h-full w-auto object-contain" />
         </div>
 
         <div className="flex flex-col gap-3">
