@@ -76,6 +76,18 @@ function fmtDate(iso) {
   return `${d}.${m}.${y}`;
 }
 
+function getDateRange(startISO, endISO) {
+  if (!startISO || !endISO || startISO > endISO) return [];
+  const dates = [];
+  let cur = new Date(startISO);
+  const end = new Date(endISO);
+  while (cur <= end) {
+    dates.push(toISO(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
+
 function fmtMoney(n) {
   if (!n && n !== 0) return "";
   return new Intl.NumberFormat("uk-UA").format(n) + " грн";
@@ -741,9 +753,9 @@ function CalendarTab({
                     {STATUS[p.status].label}
                   </span>
                 </div>
-                {Object.values(p.responses || {}).filter((v) => v === "no").length > 0 && (
+                {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length > 0 && (
                   <div className="text-[11px] text-rose-500 font-medium mt-0.5">
-                    ⚠ {Object.values(p.responses || {}).filter((v) => v === "no").length} з бригади не може поїхати
+                    ⚠ {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length} з бригади не може поїхати
                   </div>
                 )}
                 <div className="text-xs text-neutral-500 mt-0.5">{clientName(p)}</div>
@@ -919,9 +931,9 @@ function ProjectsTab({
                 <div className="text-xs text-neutral-500 mt-1">
                   {clientName(p)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)} · {p.items.length} позицій
                 </div>
-                {Object.values(p.responses || {}).filter((v) => v === "no").length > 0 && (
+                {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length > 0 && (
                   <div className="text-[11px] text-rose-500 font-medium mt-0.5">
-                    ⚠ {Object.values(p.responses || {}).filter((v) => v === "no").length} з бригади не може поїхати
+                    ⚠ {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length} з бригади не може поїхати
                   </div>
                 )}
               </div>
@@ -1593,15 +1605,18 @@ function ProjectForm({
     }
   };
 
-  // Особиста відповідь "можу / не можу поїхати" — доступна навіть у
-  // режимі "лише перегляд", бо це не редагування проекту, а особиста
-  // відповідь конкретного співробітника. Зберігає одразу, без кнопки
+  // Особиста відповідь "можу / не можу поїхати" — окремо на КОЖЕН
+  // день проекту (монтаж і зйомка можуть бути різними днями, і
+  // людина може бути вільна на один день, але не на інший).
+  // Доступна навіть у режимі "лише перегляд", бо це не редагування
+  // проекту, а особиста відповідь. Зберігає одразу, без кнопки
   // "Зберегти", і одразу сповіщає адмінів.
   const iAmInvolved = !!project && !!myEmployeeId && (responsibleId === myEmployeeId || crew.includes(myEmployeeId));
-  const myResponse = myEmployeeId ? responses[myEmployeeId] : null;
-  const setMyResponse = async (value) => {
+  const projectDates = useMemo(() => getDateRange(startDate, endDate), [startDate, endDate]);
+  const myResponses = myEmployeeId ? responses[myEmployeeId] || {} : {};
+  const setMyResponse = async (date, value) => {
     if (!project || !myEmployeeId) return;
-    const nextResponses = { ...responses, [myEmployeeId]: value };
+    const nextResponses = { ...responses, [myEmployeeId]: { ...myResponses, [date]: value } };
     setResponses(nextResponses);
     onSave({ ...project, responses: nextResponses });
 
@@ -1611,10 +1626,11 @@ function ProjectForm({
       .filter(Boolean);
     if (adminIds.length === 0) return;
     const myName = employees.find((e) => e.id === myEmployeeId)?.name || "Співробітник";
+    const dayLabel = projectDates.length > 1 ? ` на ${fmtDate(date)}` : "";
     const text =
       value === "no"
-        ? `❌ ${myName} НЕ може поїхати на роботу «${project.name}» (${fmtDate(project.startDate)})`
-        : `✅ ${myName} підтвердив(ла) участь у роботі «${project.name}» (${fmtDate(project.startDate)})`;
+        ? `❌ ${myName} НЕ може поїхати${dayLabel} на роботу «${project.name}»`
+        : `✅ ${myName} підтвердив(ла) участь${dayLabel} у роботі «${project.name}»`;
     fetch("/api/send-telegram", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1635,46 +1651,53 @@ function ProjectForm({
           </button>
         </div>
 
-        {iAmInvolved && (
-          <div
-            className={`flex items-center justify-between gap-3 px-5 py-2.5 border-b text-xs ${
-              myResponse === "no"
-                ? "bg-rose-50 border-rose-100 text-rose-700"
-                : myResponse === "yes"
-                ? "bg-emerald-50 border-emerald-100 text-emerald-700"
-                : "bg-neutral-50 border-neutral-100 text-neutral-600"
-            }`}
-          >
-            <span>
-              {myResponse === "no"
-                ? "Ви позначили, що не можете поїхати"
-                : myResponse === "yes"
-                ? "Ви підтвердили участь"
-                : "Вас призначено на цю роботу — підтвердіть, будь ласка"}
-            </span>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setMyResponse("yes")}
-                className={`text-xs font-medium px-2.5 py-1 rounded-md border ${
-                  myResponse === "yes"
-                    ? "bg-emerald-600 text-white border-emerald-600"
-                    : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                }`}
-              >
-                Можу їхати
-              </button>
-              <button
-                type="button"
-                onClick={() => setMyResponse("no")}
-                className={`text-xs font-medium px-2.5 py-1 rounded-md border ${
-                  myResponse === "no"
-                    ? "bg-rose-600 text-white border-rose-600"
-                    : "border-rose-300 text-rose-600 hover:bg-rose-50"
-                }`}
-              >
-                Не можу їхати
-              </button>
+        {iAmInvolved && projectDates.length > 0 && (
+          <div className="px-5 py-2.5 border-b border-neutral-100 bg-neutral-50">
+            <div className="text-xs text-neutral-600 mb-2">
+              {projectDates.length > 1
+                ? "Вас призначено на цю роботу — підтвердіть, будь ласка, кожен день окремо:"
+                : "Вас призначено на цю роботу — підтвердіть, будь ласка:"}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {projectDates.map((date) => {
+                const r = myResponses[date];
+                return (
+                  <div key={date} className="flex items-center justify-between gap-3 text-xs">
+                    <span
+                      className={
+                        r === "no" ? "text-rose-700 font-medium" : r === "yes" ? "text-emerald-700 font-medium" : "text-neutral-600"
+                      }
+                    >
+                      {fmtDate(date)}
+                      {r === "no" ? " — не можу" : r === "yes" ? " — можу" : ""}
+                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setMyResponse(date, "yes")}
+                        className={`text-xs font-medium px-2.5 py-1 rounded-md border ${
+                          r === "yes"
+                            ? "bg-emerald-600 text-white border-emerald-600"
+                            : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                        }`}
+                      >
+                        Можу їхати
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMyResponse(date, "no")}
+                        className={`text-xs font-medium px-2.5 py-1 rounded-md border ${
+                          r === "no"
+                            ? "bg-rose-600 text-white border-rose-600"
+                            : "border-rose-300 text-rose-600 hover:bg-rose-50"
+                        }`}
+                      >
+                        Не можу їхати
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1738,18 +1761,27 @@ function ProjectForm({
                   <div className="text-xs text-neutral-400 pt-2">Немає співробітників</div>
                 ) : (
                   <div className="border border-neutral-300 rounded-md px-2.5 py-1.5 max-h-24 overflow-y-auto flex flex-col gap-1">
-                    {employees.map((em) => (
-                      <label key={em.id} className="flex items-center gap-2 text-sm text-neutral-700">
-                        <input type="checkbox" checked={crew.includes(em.id)} onChange={() => toggleCrew(em.id)} />
-                        {em.name}
-                        {responses[em.id] === "no" && (
-                          <span className="text-[10px] text-rose-500 font-medium">не може поїхати</span>
-                        )}
-                        {responses[em.id] === "yes" && (
-                          <span className="text-[10px] text-emerald-600 font-medium">підтвердив(ла)</span>
-                        )}
-                      </label>
-                    ))}
+                    {employees.map((em) => {
+                      const empResponses = responses[em.id] || {};
+                      const noCount = projectDates.filter((d) => empResponses[d] === "no").length;
+                      const yesCount = projectDates.filter((d) => empResponses[d] === "yes").length;
+                      return (
+                        <label key={em.id} className="flex items-center gap-2 text-sm text-neutral-700">
+                          <input type="checkbox" checked={crew.includes(em.id)} onChange={() => toggleCrew(em.id)} />
+                          {em.name}
+                          {noCount > 0 && (
+                            <span className="text-[10px] text-rose-500 font-medium">
+                              не може{projectDates.length > 1 ? ` (${noCount} з ${projectDates.length} дн.)` : ""}
+                            </span>
+                          )}
+                          {noCount === 0 && yesCount > 0 && (
+                            <span className="text-[10px] text-emerald-600 font-medium">
+                              підтвердив(ла){projectDates.length > 1 ? ` (${yesCount} з ${projectDates.length} дн.)` : ""}
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
                   </div>
                 )}
               </Field>
