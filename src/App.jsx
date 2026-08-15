@@ -1387,6 +1387,8 @@ function ProjectForm({
   const [responsibleId, setResponsibleId] = useState(project?.responsibleId || (simplified ? myEmployeeId || "" : ""));
   const [receivedById, setReceivedById] = useState(project?.receivedById || "");
   const [crew, setCrew] = useState(project?.crew || []);
+  const [crewByDate, setCrewByDate] = useState(project?.crewByDate || {});
+  const [expandedCrewDay, setExpandedCrewDay] = useState(null);
   const [responses, setResponses] = useState(project?.responses || {});
   const [documents, setDocuments] = useState(project?.documents || []);
   const [uploadingDoc, setUploadingDoc] = useState(false);
@@ -1428,6 +1430,27 @@ function ProjectForm({
 
   const toggleCrew = (empId) => {
     setCrew((prev) => (prev.includes(empId) ? prev.filter((id) => id !== empId) : [...prev, empId]));
+  };
+
+  // Бригада "за замовчуванням" (crew) діє на всі дні проекту, поки
+  // конкретний день не налаштовано окремо в crewByDate — тоді для
+  // нього діє власний список, а решта днів як і раніше беруть crew.
+  const crewForDate = (date) =>
+    Object.prototype.hasOwnProperty.call(crewByDate, date) ? crewByDate[date] : crew;
+  const isDayOverridden = (date) => Object.prototype.hasOwnProperty.call(crewByDate, date);
+  const toggleCrewForDate = (date, empId) => {
+    setCrewByDate((prev) => {
+      const current = Object.prototype.hasOwnProperty.call(prev, date) ? prev[date] : crew;
+      const next = current.includes(empId) ? current.filter((id) => id !== empId) : [...current, empId];
+      return { ...prev, [date]: next };
+    });
+  };
+  const resetCrewForDate = (date) => {
+    setCrewByDate((prev) => {
+      const next = { ...prev };
+      delete next[date];
+      return next;
+    });
   };
 
   const addPayment = () =>
@@ -1498,6 +1521,13 @@ function ProjectForm({
       ].filter(Boolean);
       return lines.join("\n");
     }
+    const hasDayOverrides = Object.keys(crewByDate).length > 0;
+    const perDayLines = hasDayOverrides
+      ? projectDates.map((d) => {
+          const names = crewForDate(d).map((id) => employees.find((e) => e.id === id)?.name).filter(Boolean);
+          return `${fmtDate(d)}: ${names.length ? names.join(", ") : "нікого не призначено"}`;
+        })
+      : [];
     const lines = [
       `🎪 Новий проект: ${name.trim()}`,
       `Клієнт: ${clientN}`,
@@ -1507,7 +1537,8 @@ function ProjectForm({
       arrivalTime ? `Час прибуття на майданчик: ${arrivalTime}` : null,
       readyTime ? `Час повної готовності / початку івенту: ${readyTime}` : null,
       responsibleName ? `Відповідальний: ${responsibleName}` : null,
-      crewNames.length ? `Бригада: ${crewNames.join(", ")}` : null,
+      crewNames.length && !hasDayOverrides ? `Бригада: ${crewNames.join(", ")}` : null,
+      perDayLines.length ? `\nБригада по днях:\n${perDayLines.join("\n")}` : null,
       itemLines.length ? `\nОбладнання:\n${itemLines.join("\n")}` : null,
       notes ? `\nПримітки: ${notes}` : null,
       responsibleName || crewNames.length
@@ -1594,6 +1625,7 @@ function ProjectForm({
       responsibleId,
       receivedById,
       crew,
+      crewByDate,
       responses,
       documents,
       payments: payments.map((p) => ({ ...p, amount: Number(p.amount) || 0 })),
@@ -1611,8 +1643,10 @@ function ProjectForm({
   // Доступна навіть у режимі "лише перегляд", бо це не редагування
   // проекту, а особиста відповідь. Зберігає одразу, без кнопки
   // "Зберегти", і одразу сповіщає адмінів.
-  const iAmInvolved = !!project && !!myEmployeeId && (responsibleId === myEmployeeId || crew.includes(myEmployeeId));
   const projectDates = useMemo(() => getDateRange(startDate, endDate), [startDate, endDate]);
+  const isInvolvedOnDate = (date) =>
+    !!myEmployeeId && (responsibleId === myEmployeeId || crewForDate(date).includes(myEmployeeId));
+  const iAmInvolved = !!project && !!myEmployeeId && projectDates.some(isInvolvedOnDate);
   const myResponses = myEmployeeId ? responses[myEmployeeId] || {} : {};
   const setMyResponse = async (date, value) => {
     if (!project || !myEmployeeId) return;
@@ -1651,15 +1685,15 @@ function ProjectForm({
           </button>
         </div>
 
-        {iAmInvolved && projectDates.length > 0 && (
+        {iAmInvolved && projectDates.filter(isInvolvedOnDate).length > 0 && (
           <div className="px-5 py-2.5 border-b border-neutral-100 bg-neutral-50">
             <div className="text-xs text-neutral-600 mb-2">
-              {projectDates.length > 1
+              {projectDates.filter(isInvolvedOnDate).length > 1
                 ? "Вас призначено на цю роботу — підтвердіть, будь ласка, кожен день окремо:"
                 : "Вас призначено на цю роботу — підтвердіть, будь ласка:"}
             </div>
             <div className="flex flex-col gap-1.5">
-              {projectDates.map((date) => {
+              {projectDates.filter(isInvolvedOnDate).map((date) => {
                 const r = myResponses[date];
                 return (
                   <div key={date} className="flex items-center justify-between gap-3 text-xs">
@@ -1756,7 +1790,7 @@ function ProjectForm({
                   ))}
                 </select>
               </Field>
-              <Field label="Бригада">
+              <Field label="Бригада (за замовчуванням — на всі дні)">
                 {employees.length === 0 ? (
                   <div className="text-xs text-neutral-400 pt-2">Немає співробітників</div>
                 ) : (
@@ -1786,6 +1820,62 @@ function ProjectForm({
                 )}
               </Field>
             </div>
+          )}
+
+          {!simplified && projectDates.length > 1 && employees.length > 0 && (
+            <Field label="Бригада по днях (якщо хтось не може конкретного дня)">
+              <div className="border border-neutral-300 rounded-md divide-y divide-neutral-100">
+                {projectDates.map((date) => {
+                  const overridden = isDayOverridden(date);
+                  const dayCrew = crewForDate(date);
+                  const isOpen = expandedCrewDay === date;
+                  return (
+                    <div key={date}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCrewDay(isOpen ? null : date)}
+                        className="w-full flex items-center justify-between px-2.5 py-1.5 text-left hover:bg-neutral-50"
+                      >
+                        <span className="text-xs text-neutral-700">
+                          {fmtDate(date)}
+                          {overridden && (
+                            <span className="ml-1.5 text-[10px] text-amber-600 font-medium">окремо</span>
+                          )}
+                        </span>
+                        <span className="text-[11px] text-neutral-400 truncate max-w-[55%]">
+                          {dayCrew.length > 0
+                            ? dayCrew.map((id) => employees.find((e) => e.id === id)?.name).filter(Boolean).join(", ")
+                            : "нікого не призначено"}
+                        </span>
+                      </button>
+                      {isOpen && (
+                        <div className="px-2.5 pb-2 flex flex-col gap-1">
+                          {employees.map((em) => (
+                            <label key={em.id} className="flex items-center gap-2 text-sm text-neutral-700">
+                              <input
+                                type="checkbox"
+                                checked={dayCrew.includes(em.id)}
+                                onChange={() => toggleCrewForDate(date, em.id)}
+                              />
+                              {em.name}
+                            </label>
+                          ))}
+                          {overridden && (
+                            <button
+                              type="button"
+                              onClick={() => resetCrewForDate(date)}
+                              className="self-start text-[11px] text-neutral-500 underline hover:text-neutral-700 mt-1"
+                            >
+                              Скинути до загальної бригади
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Field>
           )}
 
           <div className="flex flex-col gap-2">
