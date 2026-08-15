@@ -1583,8 +1583,7 @@ function ProjectForm({
       expenses: expenses.map((e) => ({ ...e, amount: Number(e.amount) || 0 })),
     };
     onSave(savedProject);
-    const isPastOrClosed = status === "done" || status === "cancelled";
-    if (isNew && !isPastOrClosed && (responsibleId || crew.length > 0)) {
+    if (simplified && isNew) {
       sendTelegramNotifications();
     }
   };
