@@ -1413,7 +1413,6 @@ function ProjectForm({
   };
   const [payments, setPayments] = useState(project?.payments || []);
   const [expenses, setExpenses] = useState(project?.expenses || []);
-  const [notifyState, setNotifyState] = useState("idle"); // idle | sending | sent | error
 
   const toggleCrew = (empId) => {
     setCrew((prev) => (prev.includes(empId) ? prev.filter((id) => id !== empId) : [...prev, empId]));
@@ -1506,11 +1505,34 @@ function ProjectForm({
     return lines.join("\n");
   };
 
-  const sendTelegramNotifications = async () => {
+  const [notifyPersonalState, setNotifyPersonalState] = useState("idle"); // idle | sending | sent | error
+  const [notifyGroupState, setNotifyGroupState] = useState("idle");
+
+  const sendToTelegram = async (chatIds, setState) => {
+    const uniqueChatIds = [...new Set(chatIds.filter(Boolean))];
+    if (uniqueChatIds.length === 0) {
+      setState("error");
+      return;
+    }
+    setState("sending");
+    try {
+      const res = await fetch("/api/send-telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatIds: uniqueChatIds, message: buildTelegramMessage() }),
+      });
+      if (!res.ok) throw new Error("request failed");
+      setState("sent");
+    } catch (e) {
+      setState("error");
+    }
+  };
+
+  const sendPersonalNotifications = async () => {
     const chatIds = [];
     if (simplified) {
-      // Самостійні заявки технік бачить сам — йому й у спільну групу
-      // повідомляти не треба, тільки адмінів.
+      // Самостійні заявки технік бачить сам — йому повідомляти не
+      // треба, тільки адмінів.
       if (settings?.telegramAdminChatId) {
         settings.telegramAdminChatId
           .split(",")
@@ -1523,26 +1545,18 @@ function ProjectForm({
         const emp = employees.find((e) => e.id === empId);
         if (emp?.telegramChatId) chatIds.push(emp.telegramChatId.trim());
       }
-      if (settings?.telegramGroupChatId) chatIds.push(settings.telegramGroupChatId.trim());
     }
-    const uniqueChatIds = [...new Set(chatIds.filter(Boolean))];
-    if (uniqueChatIds.length === 0) {
-      setNotifyState("error");
-      return;
-    }
-    setNotifyState("sending");
-    try {
-      const res = await fetch("/api/send-telegram", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatIds: uniqueChatIds, message: buildTelegramMessage() }),
-      });
-      if (!res.ok) throw new Error("request failed");
-      setNotifyState("sent");
-    } catch (e) {
-      setNotifyState("error");
-    }
+    await sendToTelegram(chatIds, setNotifyPersonalState);
   };
+
+  const sendGroupNotification = async () => {
+    const chatIds = settings?.telegramGroupChatId ? [settings.telegramGroupChatId.trim()] : [];
+    await sendToTelegram(chatIds, setNotifyGroupState);
+  };
+
+  // Залишено для автоматичної розсилки при самостійному бронюванні
+  // (адмінам) — викликає той самий персональний канал.
+  const sendTelegramNotifications = sendPersonalNotifications;
 
   const handleSave = () => {
     if (!canSave) return;
@@ -1742,21 +1756,42 @@ function ProjectForm({
             </div>
           )}
 
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={sendTelegramNotifications}
-              disabled={notifyState === "sending"}
-              className="flex items-center gap-1.5 text-xs font-medium border border-neutral-300 rounded-md px-2.5 py-1.5 hover:bg-neutral-50 disabled:opacity-50"
-            >
-              <Send size={12} />
-              {notifyState === "sending" ? "Надсилання…" : "Сповістити в Telegram"}
-            </button>
-            {notifyState === "sent" && <span className="text-xs text-emerald-600">Сповіщення надіслано</span>}
-            {notifyState === "error" && (
-              <span className="text-xs text-rose-500">
-                Не вдалось надіслати — перевірте Telegram ID у бригади чи групи
-              </span>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={sendPersonalNotifications}
+                disabled={notifyPersonalState === "sending"}
+                className="flex items-center gap-1.5 text-xs font-medium border border-neutral-300 rounded-md px-2.5 py-1.5 hover:bg-neutral-50 disabled:opacity-50"
+              >
+                <Send size={12} />
+                {notifyPersonalState === "sending"
+                  ? "Надсилання…"
+                  : simplified
+                  ? "Сповістити адмінів"
+                  : "Сповістити особисто"}
+              </button>
+              {notifyPersonalState === "sent" && <span className="text-xs text-emerald-600">Надіслано</span>}
+              {notifyPersonalState === "error" && (
+                <span className="text-xs text-rose-500">Не вдалось — перевірте Telegram ID</span>
+              )}
+            </div>
+            {!simplified && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={sendGroupNotification}
+                  disabled={notifyGroupState === "sending"}
+                  className="flex items-center gap-1.5 text-xs font-medium border border-neutral-300 rounded-md px-2.5 py-1.5 hover:bg-neutral-50 disabled:opacity-50"
+                >
+                  <Send size={12} />
+                  {notifyGroupState === "sending" ? "Надсилання…" : "Сповістити в групу"}
+                </button>
+                {notifyGroupState === "sent" && <span className="text-xs text-emerald-600">Надіслано</span>}
+                {notifyGroupState === "error" && (
+                  <span className="text-xs text-rose-500">Не вдалось — перевірте Chat ID групи</span>
+                )}
+              </div>
             )}
           </div>
 
