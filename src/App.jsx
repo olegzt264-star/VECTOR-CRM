@@ -1702,9 +1702,36 @@ function ProjectForm({
   const myResponses = myEmployeeId ? responses[myEmployeeId] || {} : {};
   const setMyResponse = async (date, value) => {
     if (!project || !myEmployeeId) return;
-    const nextResponses = { ...responses, [myEmployeeId]: { ...myResponses, [date]: value } };
-    setResponses(nextResponses);
-    onSave({ ...project, responses: nextResponses });
+    // Оптимістично оновлюємо власний екран одразу.
+    const optimisticResponses = { ...responses, [myEmployeeId]: { ...myResponses, [date]: value } };
+    setResponses(optimisticResponses);
+
+    // Щоб не загубити відповідь колеги, який міг натиснути свою
+    // кнопку майже одночасно — підвантажуємо найсвіжіші дані з бази
+    // прямо перед збереженням і домішуємо зміну саме туди, а не в
+    // застарілу локальну копію проекту.
+    let mergedResponses = optimisticResponses;
+    try {
+      const res = await window.storage.get(STORAGE_KEY, false);
+      const freshState = JSON.parse(res.value);
+      const freshProjects = freshState.projects || [];
+      const freshProject = freshProjects.find((p) => p.id === project.id);
+      const freshResponses = freshProject?.responses || {};
+      mergedResponses = {
+        ...freshResponses,
+        [myEmployeeId]: { ...(freshResponses[myEmployeeId] || {}), [date]: value },
+      };
+      const updatedProjects = freshProjects.map((p) =>
+        p.id === project.id ? { ...p, responses: mergedResponses } : p
+      );
+      const raw = JSON.stringify({ ...freshState, projects: updatedProjects });
+      await window.storage.set(STORAGE_KEY, raw, false);
+      setResponses(mergedResponses);
+    } catch (e) {
+      // Якщо не вдалось підвантажити свіжі дані — принаймні
+      // зберігаємо звичним шляхом, щоб відповідь точно не загубилась.
+      onSave({ ...project, responses: optimisticResponses });
+    }
 
     const adminIds = (settings?.telegramAdminChatId || "")
       .split(",")
