@@ -88,6 +88,24 @@ function getDateRange(startISO, endISO) {
   return dates;
 }
 
+// Скільки людей, що ЗАРАЗ дійсно призначені на проект (з урахуванням
+// окремих днів), відповіли "не можу" хоча б на один зі своїх днів.
+// Якщо когось прибрали з бригади — його стара відповідь більше не
+// враховується.
+function countUnavailableAssigned(p) {
+  const dates = getDateRange(p.startDate, p.endDate);
+  const declined = new Set();
+  for (const d of dates) {
+    const dayCrew =
+      p.crewByDate && Object.prototype.hasOwnProperty.call(p.crewByDate, d) ? p.crewByDate[d] : p.crew || [];
+    const assigned = new Set([p.responsibleId, ...(dayCrew || [])].filter(Boolean));
+    for (const empId of assigned) {
+      if (p.responses?.[empId]?.[d] === "no") declined.add(empId);
+    }
+  }
+  return declined.size;
+}
+
 function fmtMoney(n) {
   if (!n && n !== 0) return "";
   return new Intl.NumberFormat("uk-UA").format(n) + " грн";
@@ -781,9 +799,9 @@ function CalendarTab({
                   {mine && (
                     <div className="text-[11px] text-amber-700 font-medium mt-0.5">Ви задіяні на цій роботі</div>
                   )}
-                  {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length > 0 && (
+                  {countUnavailableAssigned(p) > 0 && (
                     <div className="text-[11px] text-rose-500 font-medium mt-0.5">
-                      ⚠ {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length} з бригади не може поїхати
+                      ⚠ {countUnavailableAssigned(p)} з бригади не може поїхати
                     </div>
                   )}
                   <div className="text-xs text-neutral-500 mt-0.5">{clientName(p)}</div>
@@ -977,9 +995,9 @@ function ProjectsTab({
                   <div className="text-xs text-neutral-500 mt-1">
                     {clientName(p)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)} · {p.items.length} позицій
                   </div>
-                  {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length > 0 && (
+                  {countUnavailableAssigned(p) > 0 && (
                     <div className="text-[11px] text-rose-500 font-medium mt-0.5">
-                      ⚠ {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length} з бригади не може поїхати
+                      ⚠ {countUnavailableAssigned(p)} з бригади не може поїхати
                     </div>
                   )}
                 </div>
