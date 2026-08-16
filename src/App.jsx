@@ -624,6 +624,18 @@ function CalendarTab({
   const projectsForDay = (iso) =>
     projects.filter((p) => p.status !== "cancelled" && overlaps(p.startDate, p.endDate, iso, iso));
 
+  const isMyProjectOnDate = (p, date) => {
+    if (!myEmployeeId) return false;
+    if (p.responsibleId === myEmployeeId) return true;
+    const dayCrew = p.crewByDate && Object.prototype.hasOwnProperty.call(p.crewByDate, date) ? p.crewByDate[date] : p.crew;
+    return (dayCrew || []).includes(myEmployeeId);
+  };
+  const isMyProject = (p) => {
+    if (!myEmployeeId) return false;
+    if (p.responsibleId === myEmployeeId) return true;
+    return getDateRange(p.startDate, p.endDate).some((d) => isMyProjectOnDate(p, d));
+  };
+
   const clientName = (p) => {
     const id = typeof p === "string" ? p : p?.clientId;
     const found = clients.find((c) => c.id === id)?.name;
@@ -698,16 +710,22 @@ function CalendarTab({
                   {d.getDate()}
                 </span>
                 <div className="flex flex-col gap-0.5">
-                  {dayProjects.slice(0, 3).map((p) => (
-                    <div
-                      key={p.id}
-                      className="text-[10px] px-1 py-0.5 rounded truncate flex items-center gap-1 bg-neutral-100 text-neutral-700"
-                      title={p.name}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS[p.status].dot}`} />
-                      <span className="truncate">{p.name}</span>
-                    </div>
-                  ))}
+                  {dayProjects.slice(0, 3).map((p) => {
+                    const mine = isMyProjectOnDate(p, iso);
+                    return (
+                      <div
+                        key={p.id}
+                        className={`text-[10px] px-1 py-0.5 rounded truncate flex items-center gap-1 ${
+                          mine ? "bg-amber-100 text-amber-900 font-medium ring-1 ring-amber-300" : "bg-neutral-100 text-neutral-700"
+                        }`}
+                        title={mine ? `${p.name} — ваша робота` : p.name}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS[p.status].dot}`} />
+                        {mine && <span className="shrink-0">👤</span>}
+                        <span className="truncate">{p.name}</span>
+                      </div>
+                    );
+                  })}
                   {dayProjects.length > 3 && (
                     <div className="text-[10px] text-neutral-400 px-1">+{dayProjects.length - 3} ще</div>
                   )}
@@ -738,48 +756,59 @@ function CalendarTab({
           <div className="text-sm text-neutral-400 py-6 text-center">Нічого не заплановано</div>
         ) : (
           <div className="flex flex-col gap-2">
-            {selectedProjects.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => {
-                  setEditing(p);
-                  setShowForm(true);
-                }}
-                className="text-left border border-neutral-200 rounded-md p-2.5 hover:border-neutral-300 hover:bg-neutral-50"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium text-neutral-800 truncate">{p.name}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${STATUS[p.status].chip}`}>
-                    {STATUS[p.status].label}
-                  </span>
-                </div>
-                {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length > 0 && (
-                  <div className="text-[11px] text-rose-500 font-medium mt-0.5">
-                    ⚠ {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length} з бригади не може поїхати
+            {selectedProjects.map((p) => {
+              const mine = isMyProjectOnDate(p, selectedDate);
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    setEditing(p);
+                    setShowForm(true);
+                  }}
+                  className={`text-left border rounded-md p-2.5 hover:bg-neutral-50 ${
+                    mine ? "border-amber-300 bg-amber-50/60 hover:border-amber-400" : "border-neutral-200 hover:border-neutral-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-neutral-800 truncate flex items-center gap-1">
+                      {mine && <span title="Ваша робота">👤</span>}
+                      {p.name}
+                    </span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${STATUS[p.status].chip}`}>
+                      {STATUS[p.status].label}
+                    </span>
                   </div>
-                )}
-                <div className="text-xs text-neutral-500 mt-0.5">{clientName(p)}</div>
-                <div className="text-[11px] text-neutral-400 mt-1">
-                  {fmtDate(p.startDate)} — {fmtDate(p.endDate)}
-                </div>
-                {(p.warehouseTime || p.arrivalTime || p.readyTime) && (
-                  <div className="text-[11px] text-neutral-400 mt-0.5">
-                    {[
-                      p.warehouseTime ? `Склад: ${p.warehouseTime}` : null,
-                      p.arrivalTime ? `Прибуття: ${p.arrivalTime}` : null,
-                      p.readyTime ? `Готовність: ${p.readyTime}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                  {mine && (
+                    <div className="text-[11px] text-amber-700 font-medium mt-0.5">Ви задіяні на цій роботі</div>
+                  )}
+                  {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length > 0 && (
+                    <div className="text-[11px] text-rose-500 font-medium mt-0.5">
+                      ⚠ {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length} з бригади не може поїхати
+                    </div>
+                  )}
+                  <div className="text-xs text-neutral-500 mt-0.5">{clientName(p)}</div>
+                  <div className="text-[11px] text-neutral-400 mt-1">
+                    {fmtDate(p.startDate)} — {fmtDate(p.endDate)}
                   </div>
-                )}
-                {p.responsibleId && (
-                  <div className="text-[11px] text-neutral-400 mt-0.5">
-                    Відп.: {employees.find((e) => e.id === p.responsibleId)?.name || "—"}
-                  </div>
-                )}
-              </button>
-            ))}
+                  {(p.warehouseTime || p.arrivalTime || p.readyTime) && (
+                    <div className="text-[11px] text-neutral-400 mt-0.5">
+                      {[
+                        p.warehouseTime ? `Склад: ${p.warehouseTime}` : null,
+                        p.arrivalTime ? `Прибуття: ${p.arrivalTime}` : null,
+                        p.readyTime ? `Готовність: ${p.readyTime}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                  )}
+                  {p.responsibleId && (
+                    <div className="text-[11px] text-neutral-400 mt-0.5">
+                      Відп.: {employees.find((e) => e.id === p.responsibleId)?.name || "—"}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -850,6 +879,16 @@ function ProjectsTab({
     return "—";
   };
 
+  const isMyProject = (p) => {
+    if (!myEmployeeId) return false;
+    if (p.responsibleId === myEmployeeId) return true;
+    return getDateRange(p.startDate, p.endDate).some((d) => {
+      const dayCrew =
+        p.crewByDate && Object.prototype.hasOwnProperty.call(p.crewByDate, d) ? p.crewByDate[d] : p.crew;
+      return (dayCrew || []).includes(myEmployeeId);
+    });
+  };
+
   const sorted = useMemo(() => {
     const today = new Date(toISO(new Date()));
     return [...projects]
@@ -912,41 +951,49 @@ function ProjectsTab({
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {sorted.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => {
-                setEditing(p);
-                setShowForm(true);
-              }}
-              className="text-left bg-white border border-neutral-200 rounded-lg p-3.5 hover:border-neutral-300 hover:shadow-sm transition-all flex items-center justify-between gap-4"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-neutral-800 truncate">{p.name}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${STATUS[p.status].chip}`}>
-                    {STATUS[p.status].label}
-                  </span>
+          {sorted.map((p) => {
+            const mine = isMyProject(p);
+            return (
+              <button
+                key={p.id}
+                onClick={() => {
+                  setEditing(p);
+                  setShowForm(true);
+                }}
+                className={`text-left bg-white border rounded-lg p-3.5 hover:shadow-sm transition-all flex items-center justify-between gap-4 ${
+                  mine ? "border-amber-300 bg-amber-50/40 hover:border-amber-400" : "border-neutral-200 hover:border-neutral-300"
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-neutral-800 truncate flex items-center gap-1">
+                      {mine && <span title="Ваша робота">👤</span>}
+                      {p.name}
+                    </span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${STATUS[p.status].chip}`}>
+                      {STATUS[p.status].label}
+                    </span>
+                  </div>
+                  <div className="text-xs text-neutral-500 mt-1">
+                    {clientName(p)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)} · {p.items.length} позицій
+                  </div>
+                  {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length > 0 && (
+                    <div className="text-[11px] text-rose-500 font-medium mt-0.5">
+                      ⚠ {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length} з бригади не може поїхати
+                    </div>
+                  )}
                 </div>
-                <div className="text-xs text-neutral-500 mt-1">
-                  {clientName(p)} · {fmtDate(p.startDate)} — {fmtDate(p.endDate)} · {p.items.length} позицій
-                </div>
-                {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length > 0 && (
-                  <div className="text-[11px] text-rose-500 font-medium mt-0.5">
-                    ⚠ {Object.values(p.responses || {}).filter((dayMap) => Object.values(dayMap || {}).includes("no")).length} з бригади не може поїхати
+                {canViewFinancials && (
+                  <div className="text-right shrink-0">
+                    <div className="text-sm font-medium text-neutral-700">{fmtMoney(p.price)}</div>
+                    <div className={`text-[11px] ${sum(p.payments || []) >= p.price && p.price > 0 ? "text-emerald-600" : "text-neutral-400"}`}>
+                      Отримано: {fmtMoney(sum(p.payments || []))}
+                    </div>
                   </div>
                 )}
-              </div>
-              {canViewFinancials && (
-                <div className="text-right shrink-0">
-                  <div className="text-sm font-medium text-neutral-700">{fmtMoney(p.price)}</div>
-                  <div className={`text-[11px] ${sum(p.payments || []) >= p.price && p.price > 0 ? "text-emerald-600" : "text-neutral-400"}`}>
-                    Отримано: {fmtMoney(sum(p.payments || []))}
-                  </div>
-                </div>
-              )}
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
       )}
 
