@@ -1559,9 +1559,14 @@ function ProjectForm({
     }
     setState("sending");
     try {
+      const { data } = await supabase.auth.getSession();
+      const accessToken = data?.session?.access_token;
       const res = await fetch("/api/send-telegram", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
         body: JSON.stringify({ chatIds: uniqueChatIds, message: buildTelegramMessage() }),
       });
       if (!res.ok) throw new Error("request failed");
@@ -1665,11 +1670,17 @@ function ProjectForm({
       value === "no"
         ? `❌ ${myName} НЕ може поїхати${dayLabel} на роботу «${project.name}»`
         : `✅ ${myName} підтвердив(ла) участь${dayLabel} у роботі «${project.name}»`;
-    fetch("/api/send-telegram", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chatIds: adminIds, message: text }),
-    }).catch(() => {});
+    supabase.auth.getSession().then(({ data }) => {
+      const accessToken = data?.session?.access_token;
+      fetch("/api/send-telegram", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ chatIds: adminIds, message: text }),
+      }).catch(() => {});
+    });
   };
 
   return (
