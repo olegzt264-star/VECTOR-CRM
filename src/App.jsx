@@ -697,60 +697,114 @@ function CalendarTab({
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-7 border-b border-neutral-200 text-[11px] font-medium text-neutral-400 uppercase tracking-wide">
-          {DOW.map((d) => (
-            <div key={d} className="px-2 py-2 text-center">
-              {d}
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 min-w-0">
-          {cells.map((d, idx) => {
-            if (!d)
-              return <div key={idx} className="min-h-[92px] border-b border-r border-neutral-100 bg-neutral-50/40" />;
-            const iso = toISO(d);
-            const dayProjects = projectsForDay(iso);
-            const isToday = iso === todayISO;
-            const isSelected = iso === selectedDate;
-            return (
-              <button
-                key={idx}
-                onClick={() => setSelectedDate(iso)}
-                className={`min-h-[92px] min-w-0 border-b border-r border-neutral-100 p-1.5 text-left align-top flex flex-col gap-1 hover:bg-amber-50/60 transition-colors ${
-                  isSelected ? "bg-amber-50 ring-1 ring-inset ring-amber-300" : ""
-                }`}
-              >
-                <span
-                  className={`text-xs w-5 h-5 flex items-center justify-center rounded-full ${
-                    isToday ? "bg-amber-500 text-white font-semibold" : "text-neutral-500"
+        <div className="hidden sm:block">
+          <div className="grid grid-cols-7 border-b border-neutral-200 text-[11px] font-medium text-neutral-400 uppercase tracking-wide">
+            {DOW.map((d) => (
+              <div key={d} className="px-2 py-2 text-center">
+                {d}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 min-w-0">
+            {cells.map((d, idx) => {
+              if (!d)
+                return <div key={idx} className="min-h-[92px] border-b border-r border-neutral-100 bg-neutral-50/40" />;
+              const iso = toISO(d);
+              const dayProjects = projectsForDay(iso);
+              const isToday = iso === todayISO;
+              const isSelected = iso === selectedDate;
+              return (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedDate(iso)}
+                  className={`min-h-[92px] min-w-0 border-b border-r border-neutral-100 p-1.5 text-left align-top flex flex-col gap-1 hover:bg-amber-50/60 transition-colors ${
+                    isSelected ? "bg-amber-50 ring-1 ring-inset ring-amber-300" : ""
                   }`}
                 >
-                  {d.getDate()}
-                </span>
-                <div className="flex flex-col gap-0.5 min-w-0">
-                  {dayProjects.slice(0, 3).map((p) => {
-                    const mine = isMyProjectOnDate(p, iso);
-                    return (
-                      <div
-                        key={p.id}
-                        className={`text-[10px] px-1 py-0.5 rounded truncate flex items-center gap-0.5 min-w-0 ${
-                          mine ? "bg-amber-100 text-amber-900 font-medium ring-1 ring-amber-300" : "bg-neutral-100 text-neutral-700"
-                        }`}
-                        title={mine ? `${p.name} — ваша робота` : p.name}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS[p.status].dot}`} />
-                        {mine && <span className="shrink-0 text-[9px]">👤</span>}
-                        <span className="truncate min-w-0">{p.name}</span>
-                      </div>
-                    );
-                  })}
-                  {dayProjects.length > 3 && (
-                    <div className="text-[10px] text-neutral-400 px-1">+{dayProjects.length - 3} ще</div>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+                  <span
+                    className={`text-xs w-5 h-5 flex items-center justify-center rounded-full ${
+                      isToday ? "bg-amber-500 text-white font-semibold" : "text-neutral-500"
+                    }`}
+                  >
+                    {d.getDate()}
+                  </span>
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    {dayProjects.slice(0, 3).map((p) => {
+                      const mine = isMyProjectOnDate(p, iso);
+                      return (
+                        <div
+                          key={p.id}
+                          className={`text-[10px] px-1 py-0.5 rounded truncate flex items-center gap-0.5 min-w-0 ${
+                            mine ? "bg-amber-100 text-amber-900 font-medium ring-1 ring-amber-300" : "bg-neutral-100 text-neutral-700"
+                          }`}
+                          title={mine ? `${p.name} — ваша робота` : p.name}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS[p.status].dot}`} />
+                          {mine && <span className="shrink-0 text-[9px]">👤</span>}
+                          <span className="truncate min-w-0">{p.name}</span>
+                        </div>
+                      );
+                    })}
+                    {dayProjects.length > 3 && (
+                      <div className="text-[10px] text-neutral-400 px-1">+{dayProjects.length - 3} ще</div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Мобільна версія: один стовпець днів замість сітки 7 колонок —
+            так нічому "стискатись", і назви робіт ніколи не вилазять за
+            межі, незалежно від моделі телефону чи версії Safari. */}
+        <div className="sm:hidden divide-y divide-neutral-100">
+          {cells
+            .filter(Boolean)
+            .map((d) => {
+              const iso = toISO(d);
+              const dayProjects = projectsForDay(iso);
+              const isToday = iso === todayISO;
+              const isSelected = iso === selectedDate;
+              return (
+                <button
+                  key={iso}
+                  onClick={() => setSelectedDate(iso)}
+                  className={`w-full text-left px-3 py-2 flex items-start gap-2.5 ${isSelected ? "bg-amber-50" : ""}`}
+                >
+                  <span
+                    className={`shrink-0 mt-0.5 text-xs w-6 h-6 rounded-full flex items-center justify-center ${
+                      isToday ? "bg-amber-500 text-white font-semibold" : "text-neutral-500"
+                    }`}
+                  >
+                    {d.getDate()}
+                  </span>
+                  <div className="flex-1 min-w-0 flex flex-col gap-1">
+                    {dayProjects.length === 0 ? (
+                      <span className="text-xs text-neutral-300 py-0.5">—</span>
+                    ) : (
+                      dayProjects.map((p) => {
+                        const mine = isMyProjectOnDate(p, iso);
+                        return (
+                          <div
+                            key={p.id}
+                            className={`text-xs px-1.5 py-0.5 rounded truncate flex items-center gap-1 min-w-0 ${
+                              mine
+                                ? "bg-amber-100 text-amber-900 font-medium ring-1 ring-amber-300"
+                                : "bg-neutral-100 text-neutral-700"
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS[p.status].dot}`} />
+                            {mine && <span className="shrink-0">👤</span>}
+                            <span className="truncate min-w-0">{p.name}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </button>
+              );
+            })}
         </div>
       </div>
 
