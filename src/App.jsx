@@ -669,9 +669,9 @@ function CalendarTab({
   const selectedProjects = projectsForDay(selectedDate);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 min-w-0">
       {/* calendar grid */}
-      <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden">
+      <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden min-w-0">
         <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200">
           <div className="font-semibold text-neutral-800">
             {MONTHS[month]} {year}
@@ -704,7 +704,7 @@ function CalendarTab({
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7">
+        <div className="grid grid-cols-7 min-w-0">
           {cells.map((d, idx) => {
             if (!d)
               return <div key={idx} className="min-h-[92px] border-b border-r border-neutral-100 bg-neutral-50/40" />;
@@ -716,7 +716,7 @@ function CalendarTab({
               <button
                 key={idx}
                 onClick={() => setSelectedDate(iso)}
-                className={`min-h-[92px] border-b border-r border-neutral-100 p-1.5 text-left align-top flex flex-col gap-1 hover:bg-amber-50/60 transition-colors ${
+                className={`min-h-[92px] min-w-0 border-b border-r border-neutral-100 p-1.5 text-left align-top flex flex-col gap-1 hover:bg-amber-50/60 transition-colors ${
                   isSelected ? "bg-amber-50 ring-1 ring-inset ring-amber-300" : ""
                 }`}
               >
@@ -727,20 +727,20 @@ function CalendarTab({
                 >
                   {d.getDate()}
                 </span>
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-0.5 min-w-0">
                   {dayProjects.slice(0, 3).map((p) => {
                     const mine = isMyProjectOnDate(p, iso);
                     return (
                       <div
                         key={p.id}
-                        className={`text-[10px] px-1 py-0.5 rounded truncate flex items-center gap-1 ${
+                        className={`text-[10px] px-1 py-0.5 rounded truncate flex items-center gap-0.5 min-w-0 ${
                           mine ? "bg-amber-100 text-amber-900 font-medium ring-1 ring-amber-300" : "bg-neutral-100 text-neutral-700"
                         }`}
                         title={mine ? `${p.name} — ваша робота` : p.name}
                       >
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS[p.status].dot}`} />
-                        {mine && <span className="shrink-0">👤</span>}
-                        <span className="truncate">{p.name}</span>
+                        {mine && <span className="shrink-0 text-[9px]">👤</span>}
+                        <span className="truncate min-w-0">{p.name}</span>
                       </div>
                     );
                   })}
