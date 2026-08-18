@@ -1551,10 +1551,11 @@ function ProjectForm({
     for (const it of items) {
       const eq = equipment.find((e) => e.id === it.equipmentId);
       if (!eq) continue;
+      const qty = Number(it.qty) || 0;
       const usedByOthers = computeUsage(projects, it.equipmentId, startDate, endDate, project?.id);
-      const total = usedByOthers + it.qty;
+      const total = usedByOthers + qty;
       if (total > eq.qty) {
-        list.push({ eq, needed: it.qty, usedByOthers, total, available: eq.qty });
+        list.push({ eq, needed: qty, usedByOthers, total, available: eq.qty });
       }
     }
     return list;
@@ -1691,7 +1692,7 @@ function ProjectForm({
       status,
       price: price === "" ? 0 : Number(price),
       notes,
-      items,
+      items: items.map((it) => ({ ...it, qty: Math.max(1, Number(it.qty) || 1) })),
       responsibleId,
       receivedById,
       crew,
@@ -2110,11 +2111,11 @@ function ProjectForm({
           <Field label="Обладнання">
             <div className="flex flex-col gap-2">
               {items.map((it, idx) => (
-                <div key={idx} className="flex items-center gap-2">
+                <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-2 border border-neutral-200 rounded-md p-2 sm:border-0 sm:p-0">
                   <select
                     value={it.equipmentId}
                     onChange={(e) => updateItem(idx, { equipmentId: e.target.value })}
-                    className="flex-1 border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    className="w-full sm:flex-1 border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                   >
                     {Object.entries(
                       equipment.reduce((acc, eq) => {
@@ -2132,19 +2133,22 @@ function ProjectForm({
                       </optgroup>
                     ))}
                   </select>
-                  <input
-                    type="number"
-                    min={1}
-                    value={it.qty}
-                    onChange={(e) => updateItem(idx, { qty: Math.max(1, Number(e.target.value) || 1) })}
-                    className="w-16 border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  />
-                  <button
-                    onClick={() => removeItem(idx)}
-                    className="p-1.5 rounded hover:bg-neutral-100 text-neutral-400 shrink-0"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      value={it.qty}
+                      onChange={(e) => updateItem(idx, { qty: e.target.value })}
+                      onBlur={(e) => updateItem(idx, { qty: Math.max(1, Number(e.target.value) || 1) })}
+                      className="w-20 sm:w-16 border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                    <button
+                      onClick={() => removeItem(idx)}
+                      className="p-1.5 rounded hover:bg-neutral-100 text-neutral-400 shrink-0 ml-auto sm:ml-0"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               ))}
               <button
