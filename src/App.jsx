@@ -40,6 +40,7 @@ const MONTHS = [
 ];
 
 const PAYMENT_METHODS = ["Готівка", "Безготівково"];
+const TAX_RATE = 0.07; // податок 7% з безготівкових розрахунків
 
 const EXPENSE_CATEGORIES = [
   "Логістика/транспорт",
@@ -1146,15 +1147,18 @@ function FinanceTab({
         amount,
       }))
       .sort((a, b) => b.amount - a.amount);
+    const tax = nonCash * TAX_RATE;
     return {
       price,
       paid,
       expenses,
       cash,
       nonCash,
+      tax,
       crewPayments,
       remaining: Math.max(0, price - paid),
       profit: paid - expenses,
+      profitAfterTax: paid - expenses - tax,
     };
   }, [filtered, employees]);
 
@@ -1306,7 +1310,7 @@ function FinanceTab({
       </div>
 
       {/* summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
         <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
           <div className="text-[11px] text-neutral-400 mb-1">Сума проектів</div>
           <div className="text-base font-semibold text-neutral-800">{fmtMoney(totals.price)}</div>
@@ -1333,9 +1337,15 @@ function FinanceTab({
             {fmtMoney(totals.profit)}
           </div>
         </div>
+        <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
+          <div className="text-[11px] text-neutral-400 mb-1">Прибуток після податку</div>
+          <div className={`text-base font-semibold ${totals.profitAfterTax >= 0 ? "text-neutral-800" : "text-rose-500"}`}>
+            {fmtMoney(totals.profitAfterTax)}
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-5">
+      <div className="grid grid-cols-3 gap-3 mb-5">
         <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
           <div className="text-[11px] text-neutral-400 mb-1">Готівкою отримано</div>
           <div className="text-base font-semibold text-neutral-800">{fmtMoney(totals.cash)}</div>
@@ -1343,6 +1353,10 @@ function FinanceTab({
         <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
           <div className="text-[11px] text-neutral-400 mb-1">Безготівково отримано</div>
           <div className="text-base font-semibold text-neutral-800">{fmtMoney(totals.nonCash)}</div>
+        </div>
+        <div className="bg-white border border-amber-200 bg-amber-50/50 rounded-lg p-3.5">
+          <div className="text-[11px] text-amber-700 mb-1">Податок (7% з безготівки)</div>
+          <div className="text-base font-semibold text-amber-800">{fmtMoney(totals.tax)}</div>
         </div>
       </div>
 
