@@ -1154,6 +1154,11 @@ function FinanceTab({
     // частина), припускаючи, що вона теж прийде безготівково.
     const projectedNonCash = nonCash + remaining;
     const projectedTax = projectedNonCash * TAX_RATE;
+    // Запланований прибуток: якби всі ці проекти повністю оплатили і
+    // завершили — вся сума проекту мінус витрати мінус прогнозований
+    // податок. Витрати беруться поточні (ще можуть зрости, якщо
+    // проект не завершено).
+    const plannedProfit = price - expenses - projectedTax;
     return {
       price,
       paid,
@@ -1163,6 +1168,7 @@ function FinanceTab({
       tax,
       projectedNonCash,
       projectedTax,
+      plannedProfit,
       crewPayments,
       remaining,
       profit: paid - expenses,
@@ -1318,7 +1324,7 @@ function FinanceTab({
       </div>
 
       {/* summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-5">
         <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
           <div className="text-[11px] text-neutral-400 mb-1">Сума проектів</div>
           <div className="text-base font-semibold text-neutral-800">{fmtMoney(totals.price)}</div>
@@ -1340,17 +1346,26 @@ function FinanceTab({
           <div className="text-base font-semibold text-rose-500">{fmtMoney(totals.expenses)}</div>
         </div>
         <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
-          <div className="text-[11px] text-neutral-400 mb-1">Прибуток</div>
+          <div className="text-[11px] text-neutral-400 mb-1">Прибуток (по факту)</div>
           <div className={`text-base font-semibold ${totals.profit >= 0 ? "text-neutral-800" : "text-rose-500"}`}>
             {fmtMoney(totals.profit)}
           </div>
         </div>
         <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
-          <div className="text-[11px] text-neutral-400 mb-1">Прибуток після податку</div>
+          <div className="text-[11px] text-neutral-400 mb-1">Прибуток після податку (по факту)</div>
           <div className={`text-base font-semibold ${totals.profitAfterTax >= 0 ? "text-neutral-800" : "text-rose-500"}`}>
             {fmtMoney(totals.profitAfterTax)}
           </div>
         </div>
+        <div className="bg-white border border-emerald-300 bg-emerald-50/50 rounded-lg p-3.5">
+          <div className="text-[11px] text-emerald-700 mb-1">Запланований прибуток</div>
+          <div className={`text-base font-semibold ${totals.plannedProfit >= 0 ? "text-emerald-800" : "text-rose-500"}`}>
+            {fmtMoney(totals.plannedProfit)}
+          </div>
+        </div>
+      </div>
+      <div className="text-[11px] text-neutral-400 -mt-3 mb-5">
+        «Запланований» — якщо всі ці проекти повністю оплатять: повна сума проектів мінус витрати мінус прогнозований податок.
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
