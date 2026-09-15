@@ -1148,6 +1148,12 @@ function FinanceTab({
       }))
       .sort((a, b) => b.amount - a.amount);
     const tax = nonCash * TAX_RATE;
+    const remaining = Math.max(0, price - paid);
+    // Прогнозований податок: враховує не тільки вже отримані
+    // безготівкові кошти, а й те, що клієнти ще винні (неотримана
+    // частина), припускаючи, що вона теж прийде безготівково.
+    const projectedNonCash = nonCash + remaining;
+    const projectedTax = projectedNonCash * TAX_RATE;
     return {
       price,
       paid,
@@ -1155,8 +1161,10 @@ function FinanceTab({
       cash,
       nonCash,
       tax,
+      projectedNonCash,
+      projectedTax,
       crewPayments,
-      remaining: Math.max(0, price - paid),
+      remaining,
       profit: paid - expenses,
       profitAfterTax: paid - expenses - tax,
     };
@@ -1345,7 +1353,7 @@ function FinanceTab({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
           <div className="text-[11px] text-neutral-400 mb-1">Готівкою отримано</div>
           <div className="text-base font-semibold text-neutral-800">{fmtMoney(totals.cash)}</div>
@@ -1355,9 +1363,16 @@ function FinanceTab({
           <div className="text-base font-semibold text-neutral-800">{fmtMoney(totals.nonCash)}</div>
         </div>
         <div className="bg-white border border-amber-200 bg-amber-50/50 rounded-lg p-3.5">
-          <div className="text-[11px] text-amber-700 mb-1">Податок (7% з безготівки)</div>
+          <div className="text-[11px] text-amber-700 mb-1">Податок з отриманого (7%)</div>
           <div className="text-base font-semibold text-amber-800">{fmtMoney(totals.tax)}</div>
         </div>
+        <div className="bg-white border border-amber-300 bg-amber-50 rounded-lg p-3.5">
+          <div className="text-[11px] text-amber-800 mb-1">Податок разом з неотриманим (7%)</div>
+          <div className="text-base font-semibold text-amber-900">{fmtMoney(totals.projectedTax)}</div>
+        </div>
+      </div>
+      <div className="text-[11px] text-neutral-400 -mt-3 mb-5">
+        «Разом з неотриманим» — прогноз, якщо вся ще не отримана сума по проектах теж прийде безготівково.
       </div>
 
       {totals.crewPayments.length > 0 && (
