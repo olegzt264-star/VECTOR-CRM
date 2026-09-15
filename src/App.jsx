@@ -1139,15 +1139,30 @@ function FinanceTab({
       paid = 0,
       expenses = 0,
       cash = 0,
-      nonCash = 0;
+      nonCash = 0,
+      projectedRemainderNonCash = 0;
     const crewPayByEmployee = {};
     for (const p of filtered) {
-      price += Number(p.price) || 0;
-      paid += sum(p.payments || []);
+      const projPrice = Number(p.price) || 0;
+      const projPaid = sum(p.payments || []);
+      price += projPrice;
+      paid += projPaid;
       expenses += sum(p.expenses || []);
+      let projNonCash = 0;
       for (const pay of p.payments || []) {
         if (pay.method === "Готівка") cash += Number(pay.amount) || 0;
-        else nonCash += Number(pay.amount) || 0;
+        else {
+          nonCash += Number(pay.amount) || 0;
+          projNonCash += Number(pay.amount) || 0;
+        }
+      }
+      // Неоплачений залишок конкретного проекту вважаємо "майбутньою
+      // безготівкою" лише тоді, коли по цьому проекту вже була хоча
+      // б одна безготівкова оплата. Якщо клієнт платив лише готівкою
+      // — його борг теж, найімовірніше, закриється готівкою, тож у
+      // прогноз податку його не додаємо.
+      if (projNonCash > 0) {
+        projectedRemainderNonCash += Math.max(0, projPrice - projPaid);
       }
       for (const exp of p.expenses || []) {
         if (exp.category === "Оплата бригади" && exp.employeeId) {
@@ -1165,9 +1180,10 @@ function FinanceTab({
     const tax = nonCash * TAX_RATE;
     const remaining = Math.max(0, price - paid);
     // Прогнозований податок: уже отримані безготівкові кошти плюс
-    // увесь ще не оплачений залишок по відфільтрованих проектах —
-    // вважаємо, що те, що ще не розрахувалось, теж буде безготівково.
-    const projectedNonCash = nonCash + remaining;
+    // неоплачений залишок тільки тих проектів, де вже була
+    // безготівкова оплата (див. цикл вище) — щоб борг клієнтів, які
+    // завжди платять готівкою, не потрапляв у розрахунок.
+    const projectedNonCash = nonCash + projectedRemainderNonCash;
     const projectedTax = projectedNonCash * TAX_RATE;
     // Запланований прибуток: якби всі ці проекти повністю оплатили і
     // завершили — вся сума проекту мінус витрати мінус прогнозований
@@ -1402,7 +1418,7 @@ function FinanceTab({
         </div>
       </div>
       <div className="text-[11px] text-neutral-400 -mt-3 mb-5">
-        «Разом з неотриманим» — прогноз, якщо весь ще не оплачений залишок по проектах теж прийде безготівково.
+        «Разом з неотриманим» — 7% з отриманих безготівкових коштів + неоплачений залишок тих проектів, де вже була хоча б одна безготівкова оплата.
       </div>
 
       {totals.crewPayments.length > 0 && (
