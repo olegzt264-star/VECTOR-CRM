@@ -1066,8 +1066,14 @@ function FinanceTab({
 }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [periodFrom, setPeriodFrom] = useState("");
-  const [periodTo, setPeriodTo] = useState("");
+  const currentMonthRange = () => {
+    const now = new Date();
+    const from = toISO(new Date(now.getFullYear(), now.getMonth(), 1));
+    const to = toISO(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    return { from, to };
+  };
+  const [periodFrom, setPeriodFrom] = useState(() => currentMonthRange().from);
+  const [periodTo, setPeriodTo] = useState(() => currentMonthRange().to);
   const [clientFilter, setClientFilter] = useState("all");
   const [receivedByFilter, setReceivedByFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -1174,8 +1180,8 @@ function FinanceTab({
   }, [filtered, sortBy, employees]);
 
   const hasFilters =
-    periodFrom ||
-    periodTo ||
+    periodFrom !== currentMonthRange().from ||
+    periodTo !== currentMonthRange().to ||
     clientFilter !== "all" ||
     receivedByFilter !== "all" ||
     statusFilter !== "all" ||
@@ -1273,8 +1279,9 @@ function FinanceTab({
         {hasFilters && (
           <button
             onClick={() => {
-              setPeriodFrom("");
-              setPeriodTo("");
+              const { from, to } = currentMonthRange();
+              setPeriodFrom(from);
+              setPeriodTo(to);
               setClientFilter("all");
               setReceivedByFilter("all");
               setStatusFilter("all");
@@ -1282,7 +1289,18 @@ function FinanceTab({
             }}
             className="text-xs text-neutral-500 hover:text-neutral-700 underline pb-2"
           >
-            Скинути фільтри
+            Поточний місяць
+          </button>
+        )}
+        {(periodFrom || periodTo) && (
+          <button
+            onClick={() => {
+              setPeriodFrom("");
+              setPeriodTo("");
+            }}
+            className="text-xs text-neutral-500 hover:text-neutral-700 underline pb-2"
+          >
+            За весь час
           </button>
         )}
       </div>
