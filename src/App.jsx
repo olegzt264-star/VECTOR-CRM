@@ -56,12 +56,6 @@ function sum(arr) {
   return arr.reduce((s, x) => s + (Number(x.amount) || 0), 0);
 }
 
-// Скільки фактично отримано — виключає оплати, позначені як ще
-// не отримані (очікувані).
-function sumReceived(payments) {
-  return (payments || []).filter((p) => p.received !== false).reduce((s, x) => s + (Number(x.amount) || 0), 0);
-}
-
 function uid(prefix) {
   return prefix + "_" + Math.random().toString(36).slice(2, 10);
 }
@@ -1026,8 +1020,8 @@ function ProjectsTab({
                 {canViewFinancials && (
                   <div className="text-right shrink-0">
                     <div className="text-sm font-medium text-neutral-700">{fmtMoney(p.price)}</div>
-                    <div className={`text-[11px] ${sumReceived(p.payments) >= p.price && p.price > 0 ? "text-emerald-600" : "text-neutral-400"}`}>
-                      Отримано: {fmtMoney(sumReceived(p.payments))}
+                    <div className={`text-[11px] ${sum(p.payments || []) >= p.price && p.price > 0 ? "text-emerald-600" : "text-neutral-400"}`}>
+                      Отримано: {fmtMoney(sum(p.payments || []))}
                     </div>
                   </div>
                 )}
@@ -1115,7 +1109,7 @@ function FinanceTab({
   const employeeName = (id) => employees.find((e) => e.id === id)?.name || "";
 
   const paymentStatus = (p) => {
-    const paid = sumReceived(p.payments);
+    const paid = sum(p.payments || []);
     if (p.price > 0 && paid >= p.price) return "paid";
     if (paid > 0) return "partial";
     return "unpaid";
@@ -1146,27 +1140,27 @@ function FinanceTab({
       expenses = 0,
       cash = 0,
       nonCash = 0,
-      plannedNonCash = 0,
-      plannedCash = 0;
+      projectedRemainderNonCash = 0;
     const crewPayByEmployee = {};
     for (const p of filtered) {
       const projPrice = Number(p.price) || 0;
+      const projPaid = sum(p.payments || []);
       price += projPrice;
+      paid += projPaid;
       expenses += sum(p.expenses || []);
+      // Чи вказано взагалі спосіб "Безготівково" по цьому проекту —
+      // перевіряємо САМ ФАКТ наявності такого запису, а не суму:
+      // часто такий запис створюється одразу при старті проекту з
+      // сумою 0 як заготовка "буде безготівково", і сума
+      // поповнюється пізніше.
+      const hasNonCashRecord = (p.payments || []).some((pay) => pay.method !== "Готівка");
       for (const pay of p.payments || []) {
         const amt = Number(pay.amount) || 0;
-        const isReceived = pay.received !== false;
-        if (isReceived) {
-          paid += amt;
-          if (pay.method === "Готівка") cash += amt;
-          else nonCash += amt;
-        } else {
-          // Очікувана (ще не отримана) оплата — не рахується як
-          // отримані гроші, але її спосіб (готівка/безготівково) вже
-          // відомий заздалегідь і йде в прогноз податку.
-          if (pay.method === "Готівка") plannedCash += amt;
-          else plannedNonCash += amt;
-        }
+        if (pay.method === "Готівка") cash += amt;
+        else nonCash += amt;
+      }
+      if (hasNonCashRecord) {
+        projectedRemainderNonCash += Math.max(0, projPrice - projPaid);
       }
       for (const exp of p.expenses || []) {
         if (exp.category === "Оплата бригади" && exp.employeeId) {
@@ -1184,10 +1178,9 @@ function FinanceTab({
     const tax = nonCash * TAX_RATE;
     const remaining = Math.max(0, price - paid);
     // Прогнозований податок: уже отримані безготівкові кошти плюс
-    // ті очікувані оплати, які самі позначені як "Безготівково" (але
-    // ще не отримані) — спосіб оплати вказується заздалегідь при
-    // додаванні очікуваної оплати, вгадувати нічого не потрібно.
-    const projectedNonCash = nonCash + plannedNonCash;
+    // неоплачений залишок тільки тих проектів, де вже вказано спосіб
+    // "Безготівково" (див. цикл вище — байдуже, на яку суму).
+    const projectedNonCash = nonCash + projectedRemainderNonCash;
     const projectedTax = projectedNonCash * TAX_RATE;
     // Запланований прибуток: якби всі ці проекти повністю оплатили і
     // завершили — вся сума проекту мінус витрати мінус прогнозований
@@ -1200,8 +1193,6 @@ function FinanceTab({
       expenses,
       cash,
       nonCash,
-      plannedCash,
-      plannedNonCash,
       tax,
       projectedNonCash,
       projectedTax,
@@ -1405,7 +1396,7 @@ function FinanceTab({
         «Запланований» — якщо всі ці проекти повністю оплатять: повна сума проектів мінус витрати мінус прогнозований податок.
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         <div className="bg-white border border-neutral-200 rounded-lg p-3.5">
           <div className="text-[11px] text-neutral-400 mb-1">Готівкою отримано</div>
           <div className="text-base font-semibold text-neutral-800">{fmtMoney(totals.cash)}</div>
@@ -1414,24 +1405,17 @@ function FinanceTab({
           <div className="text-[11px] text-neutral-400 mb-1">Безготівково отримано</div>
           <div className="text-base font-semibold text-neutral-800">{fmtMoney(totals.nonCash)}</div>
         </div>
-        <div className="bg-white border border-sky-200 bg-sky-50/50 rounded-lg p-3.5">
-          <div className="text-[11px] text-sky-700 mb-1">Очікується безготівково</div>
-          <div className="text-base font-semibold text-sky-800">{fmtMoney(totals.plannedNonCash)}</div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 mb-5">
         <div className="bg-white border border-amber-200 bg-amber-50/50 rounded-lg p-3.5">
           <div className="text-[11px] text-amber-700 mb-1">Податок з отриманого (7%)</div>
           <div className="text-base font-semibold text-amber-800">{fmtMoney(totals.tax)}</div>
         </div>
         <div className="bg-white border border-amber-300 bg-amber-50 rounded-lg p-3.5">
-          <div className="text-[11px] text-amber-800 mb-1">Податок разом з очікуваним (7%)</div>
+          <div className="text-[11px] text-amber-800 mb-1">Податок разом з неотриманим (7%)</div>
           <div className="text-base font-semibold text-amber-900">{fmtMoney(totals.projectedTax)}</div>
         </div>
       </div>
       <div className="text-[11px] text-neutral-400 -mt-3 mb-5">
-        «Очікується безготівково» — оплати, додані в проекті з позначкою способу розрахунку, але ще без галочки "Отримано". «Разом з очікуваним» — податок з уже отриманих безготівкових коштів плюс з цих очікуваних.
+        «Разом з неотриманим» — 7% з отриманих безготівкових коштів + неоплачений залишок тих проектів, де вказано спосіб "Безготівково".
       </div>
 
       {totals.crewPayments.length > 0 && (
@@ -1457,7 +1441,7 @@ function FinanceTab({
         <div className="flex flex-col gap-2">
           {sorted.map((p) => {
             const st = paymentStatus(p);
-            const paid = sumReceived(p.payments);
+            const paid = sum(p.payments || []);
             const remaining = Math.max(0, (Number(p.price) || 0) - paid);
             return (
               <button
@@ -1627,7 +1611,7 @@ function ProjectForm({
   const addPayment = () =>
     setPayments((prev) => [
       ...prev,
-      { id: uid("pay"), date: toISO(new Date()), amount: "", method: PAYMENT_METHODS[0], received: true, note: "" },
+      { id: uid("pay"), date: toISO(new Date()), amount: "", method: PAYMENT_METHODS[0], note: "" },
     ]);
   const updatePayment = (idx, patch) => setPayments((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
   const removePayment = (idx) => setPayments((prev) => prev.filter((_, i) => i !== idx));
@@ -1640,7 +1624,7 @@ function ProjectForm({
   const updateExpense = (idx, patch) => setExpenses((prev) => prev.map((e, i) => (i === idx ? { ...e, ...patch } : e)));
   const removeExpense = (idx) => setExpenses((prev) => prev.filter((_, i) => i !== idx));
 
-  const totalPaid = useMemo(() => sum(payments.filter((p) => p.received !== false)), [payments]);
+  const totalPaid = useMemo(() => sum(payments), [payments]);
   const totalExpenses = useMemo(() => sum(expenses), [expenses]);
 
   const addItem = () => {
@@ -2304,68 +2288,45 @@ function ProjectForm({
 
           {canViewFinancials && (
             <>
-              <Field label="Оплати від клієнта (включно з очікуваними)">
+              <Field label="Оплати від клієнта">
                 <div className="flex flex-col gap-2">
-                  {payments.map((p, idx) => {
-                    const received = p.received !== false;
-                    return (
-                      <div key={p.id} className="border border-neutral-200 rounded-md p-2 flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="date"
-                            value={p.date}
-                            onChange={(e) => updatePayment(idx, { date: e.target.value })}
-                            className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                          />
-                          <select
-                            value={p.method || PAYMENT_METHODS[0]}
-                            onChange={(e) => updatePayment(idx, { method: e.target.value })}
-                            className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                          >
-                            {PAYMENT_METHODS.map((m) => (
-                              <option key={m} value={m}>
-                                {m}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            type="number"
-                            value={p.amount}
-                            onChange={(e) => updatePayment(idx, { amount: e.target.value })}
-                            placeholder="Сума"
-                            className="w-24 border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                          />
-                          <button
-                            onClick={() => removePayment(idx)}
-                            className="p-1.5 rounded hover:bg-neutral-100 text-neutral-400 shrink-0 ml-auto"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            value={p.note}
-                            onChange={(e) => updatePayment(idx, { note: e.target.value })}
-                            placeholder="Примітка (аванс, фінрозрахунок…)"
-                            className="flex-1 border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                          />
-                          <label className="flex items-center gap-1.5 text-xs text-neutral-600 shrink-0 whitespace-nowrap">
-                            <input
-                              type="checkbox"
-                              checked={received}
-                              onChange={(e) => updatePayment(idx, { received: e.target.checked })}
-                            />
-                            Отримано
-                          </label>
-                        </div>
-                        {!received && (
-                          <div className="text-[11px] text-amber-600">
-                            Очікується — не враховано як отримані гроші, але враховано в прогноз податку
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {payments.map((p, idx) => (
+                    <div key={p.id} className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={p.date}
+                        onChange={(e) => updatePayment(idx, { date: e.target.value })}
+                        className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                      <select
+                        value={p.method || PAYMENT_METHODS[0]}
+                        onChange={(e) => updatePayment(idx, { method: e.target.value })}
+                        className="border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      >
+                        {PAYMENT_METHODS.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        value={p.amount}
+                        onChange={(e) => updatePayment(idx, { amount: e.target.value })}
+                        placeholder="Сума"
+                        className="w-24 border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                      <input
+                        value={p.note}
+                        onChange={(e) => updatePayment(idx, { note: e.target.value })}
+                        placeholder="Примітка (аванс, фінрозрахунок…)"
+                        className="flex-1 border border-neutral-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                      <button onClick={() => removePayment(idx)} className="p-1.5 rounded hover:bg-neutral-100 text-neutral-400 shrink-0">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
               <button
                 onClick={addPayment}
                 className="text-xs font-medium text-neutral-600 border border-dashed border-neutral-300 rounded-md py-1.5 hover:bg-neutral-50"
