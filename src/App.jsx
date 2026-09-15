@@ -234,6 +234,21 @@ function CRMApp({ onLogout, profile }) {
     return unsubscribe;
   }, []);
 
+  // ---- автозавершення проектів, чия дата вже минула ----
+  useEffect(() => {
+    if (!loaded) return;
+    const todayISO = toISO(new Date());
+    let changed = false;
+    const updated = projects.map((p) => {
+      if (p.status !== "done" && p.status !== "cancelled" && p.endDate && p.endDate < todayISO) {
+        changed = true;
+        return { ...p, status: "done" };
+      }
+      return p;
+    });
+    if (changed) setProjects(updated);
+  }, [projects, loaded]);
+
   // ---- persist on change (debounced, with immediate flush on close) ----
   const flushSave = async () => {
     if (!loadedRef.current) return;
